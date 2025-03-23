@@ -1,0 +1,9 @@
+# Exclude ALL node_modules in any subfolder
+**/node_modules
+node_modules
+
+# Also exclude Git data, Next build outputs, etc.
+.git
+.next
+dist
+*.log

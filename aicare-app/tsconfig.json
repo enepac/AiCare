@@ -1,0 +1,48 @@
+{
+  "compilerOptions": {
+    "esModuleInterop": true,
+    "strict": false,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@/utils/*": ["src/utils/*"],
+      "@/models/*": ["src/models/*"],
+      "@/middleware/*": ["src/middleware/*"],
+      "@components/*": ["src/components/*"],
+      "@/lib/*": ["src/lib/*"]
+      // "next-auth/*": ["node_modules/next-auth/*"] // ❌ Removed or commented out
+    },
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "target": "ESNext",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true,
+    "moduleResolution": "NodeNext", // ✅ Fix module resolution for modern Node.js
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "types": ["next", "next-auth", "jest", "node"], // ✅ Node.js + NextAuth built-in types
+    "incremental": true,
+    "module": "NodeNext",
+    "allowSyntheticDefaultImports": true,
+    "strictNullChecks": true,
+    "plugins": [{ "name": "next" }]
+  },
+  "ts-node": {
+    "require": ["tsconfig-paths/register"] // ✅ For path alias resolution in ts-node
+  },
+  "include": [
+    "src",
+    "src/types/**/*.d.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": ["node_modules", "backend"]
+}

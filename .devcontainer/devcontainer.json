@@ -1,0 +1,29 @@
+{
+  "name": "AiCare Dev Container",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:20",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/aicare,type=bind",
+  "workspaceFolder": "/workspaces/aicare",
+  "remoteUser": "node",
+  "forwardPorts": [4000],
+  "containerEnv": {
+    "PORT": "4000",
+    "NEXT_PUBLIC_PORT": "4000"
+  },
+  "mounts": [
+    "source=aicare_data,target=/workspaces/aicare/data,type=volume",
+    "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
+  ],
+  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y docker.io && npm install",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "ms-vscode.vscode-typescript-next"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "zsh"
+      }
+    }
+  }
+}
