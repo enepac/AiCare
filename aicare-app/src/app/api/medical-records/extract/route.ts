@@ -9,7 +9,6 @@ import MedicalRecord from "@/models/MedicalRecord";
 export async function GET(req: NextRequest) {
   await dbConnect();
 
-  // Extract token
   const authHeader = req.headers.get("Authorization") || "";
   if (!authHeader.startsWith("Bearer ")) {
     return NextResponse.json({ error: "Unauthorized - Missing token" }, { status: 401 });
@@ -53,18 +52,15 @@ export async function GET(req: NextRequest) {
       extractedText = data.text;
     } else if (["image/jpeg", "image/png"].includes(record.fileType)) {
       const { spawn } = await import("child_process");
-      const filePath = fullPath;
-
-      const ocr = spawn("npx", ["ts-node", "scripts/ocr.ts", filePath]);
+      const ocr = spawn("npx", ["ts-node", "scripts/ocr.ts", fullPath]);
 
       const chunks: Buffer[] = [];
-
       extractedText = await new Promise<string>((resolve, reject) => {
         ocr.stdout.on("data", (chunk) => chunks.push(chunk));
         ocr.stderr.on("data", (err) => console.error("⚠️ OCR stderr:", err.toString()));
         ocr.on("close", (code) => {
           if (code !== 0) {
-            reject(new Error(`OCR process exited with code ${code}`));
+            reject(new Error(`OCR failed with exit code ${code}`));
           } else {
             resolve(Buffer.concat(chunks).toString("utf-8").trim());
           }
@@ -77,7 +73,23 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    return NextResponse.json({ extractedText });
+    // 🌟 Send extractedText to AI parser
+    const aiRes = await fetch("http://localhost:4000/api/ai/parse", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ extractedText })
+    });
+
+    const { parsed } = await aiRes.json();
+
+    // Save parsed output into MongoDB
+    record.parsedAI = parsed;
+    await record.save();
+
+    return NextResponse.json({
+      extractedText,
+      parsed: record.parsedAI
+    });
   } catch (error) {
     console.error("❌ Text extraction error:", error);
     return NextResponse.json({ error: "Failed to extract text" }, { status: 500 });

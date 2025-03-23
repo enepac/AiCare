@@ -1,11 +1,12 @@
 import mongoose, { Schema, Document } from "mongoose";
 
-interface IMedicalRecord extends Document {
+export interface IMedicalRecord extends Document {
   userEmail: string;
   fileName: string;
   fileType: string;
   uploadDate: Date;
   filePath: string;
+  parsedAI?: Record<string, any>; // ✅ new field for storing GPT output
 }
 
 const MedicalRecordSchema = new Schema<IMedicalRecord>({
@@ -13,7 +14,8 @@ const MedicalRecordSchema = new Schema<IMedicalRecord>({
   fileName: { type: String, required: true },
   fileType: { type: String, required: true },
   uploadDate: { type: Date, default: Date.now },
-  filePath: { type: String, required: true }
+  filePath: { type: String, required: true },
+  parsedAI: { type: Schema.Types.Mixed, default: {} } // ✅ flexible JSON field
 });
 
 const MedicalRecord =
