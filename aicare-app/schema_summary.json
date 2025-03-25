@@ -1,0 +1,9 @@
+[
+  "patient_name",
+  "age",
+  "chief_complaint",
+  "findings",
+  "assessment",
+  "plan_medications",
+  "plan_follow_up"
+]

@@ -5,7 +5,8 @@ import MedicalRecord from "@/models/MedicalRecord";
 import mime from "mime-types";
 import { uploadFileToS3 } from "@/lib/aws/s3Uploader";
 import { parseDocumentWithTextract } from "@/lib/aws/textractParser";
-import saveParsedAI from "@/lib/mongodb/saveParsedAI";
+import { parseMedicalTextWithGPT } from "@/lib/ai/gptMedicalParser";
+import { generateSchemaSummary } from "@/lib/mongodb/schemaSummary"; // ✅ added import
 
 const ALLOWED_TYPES = ["application/pdf", "image/jpeg", "image/png", "application/dicom"];
 
@@ -60,32 +61,39 @@ export async function POST(req: NextRequest) {
     const s3Url = await uploadFileToS3(fileBuffer, fileName, fileType);
     console.log("✅ File successfully uploaded to S3:", s3Url);
 
+    // Textract parsing
     const textractResult = await parseDocumentWithTextract(
       "aicare-medical-records-uploads",
       fileName
     );
-    console.log("✅ Textract Response:", JSON.stringify(textractResult, null, 2));
+    console.log("✅ Extracted Text:", textractResult.extractedText);
 
+    // GPT-powered structured parsing with consistent field names
+    const structuredData = await parseMedicalTextWithGPT(textractResult.extractedText);
+    console.log("✅ GPT Structured Data:", structuredData);
+
+    // Save dynamically structured data directly to MongoDB (dynamic schema)
     const newRecord = new MedicalRecord({
       userEmail,
       fileName,
       fileType,
       uploadDate: new Date(),
       filePath: s3Url,
-      parsedAI: textractResult
+      ...structuredData // Dynamically merge GPT-structured fields
     });
 
     const savedRecord = await newRecord.save();
-    console.log("✅ Record saved to MongoDB:", savedRecord);
+    console.log("✅ Medical record (dynamic structured fields) saved:", savedRecord);
 
-    await saveParsedAI(savedRecord._id.toString(), textractResult);
-    console.log("✅ Parsed AI stored successfully.");
+    // ✅ Immediately regenerate schema summary after every upload
+    await generateSchemaSummary();
+    console.log("✅ Schema summary updated after upload.");
 
     return NextResponse.json({
-      message: "File uploaded, parsed, and saved successfully",
+      message: "File uploaded, parsed, and dynamically stored successfully",
       fileName,
       filePath: s3Url,
-      parsedAI: textractResult
+      parsedAI: structuredData
     });
   } catch (error) {
     console.error("❌ Error during file processing:", error);

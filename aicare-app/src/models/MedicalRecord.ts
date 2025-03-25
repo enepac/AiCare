@@ -6,17 +6,19 @@ export interface IMedicalRecord extends Document {
   fileType: string;
   uploadDate: Date;
   filePath: string;
-  parsedAI?: Record<string, any>; // ✅ new field for storing GPT output
+  [key: string]: unknown; // Allow dynamic fields
 }
 
-const MedicalRecordSchema = new Schema<IMedicalRecord>({
-  userEmail: { type: String, required: true },
-  fileName: { type: String, required: true },
-  fileType: { type: String, required: true },
-  uploadDate: { type: Date, default: Date.now },
-  filePath: { type: String, required: true },
-  parsedAI: { type: Schema.Types.Mixed, default: {} } // ✅ flexible JSON field
-});
+const MedicalRecordSchema = new Schema<IMedicalRecord>(
+  {
+    userEmail: { type: String, required: true },
+    fileName: { type: String, required: true },
+    fileType: { type: String, required: true },
+    uploadDate: { type: Date, default: Date.now },
+    filePath: { type: String, required: true }
+  },
+  { strict: false } // Enable dynamic schema
+);
 
 const MedicalRecord =
   mongoose.models.MedicalRecord ||

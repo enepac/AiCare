@@ -39,7 +39,25 @@ export default function MedicalRecords() {
 
       if (!res.ok) throw new Error("Failed to fetch records");
       const data = await res.json();
-      setRecords(data.records);
+
+      // ✅ Map dynamic schema directly to parsedAI for frontend compatibility
+      // ✅ Corrected dynamic schema mapping
+      const records = data.records.map((record) => {
+        const { _id, userEmail, fileName, fileType, uploadDate, filePath, __v, ...parsedAIFields } =
+          record;
+
+        return {
+          _id,
+          userEmail,
+          fileName,
+          fileType,
+          uploadDate,
+          filePath,
+          parsedAI: parsedAIFields // explicitly fix to directly pass dynamic fields
+        };
+      });
+
+      setRecords(records);
     } catch (err) {
       setError("Error fetching medical records.");
       console.error("❌ Fetch Error:", err);
@@ -195,13 +213,30 @@ export default function MedicalRecords() {
                   Download
                 </a>
 
-                {record.parsedAI ? (
+                {Object.keys(record).length > 0 ? (
                   <details className="mt-2 bg-green-50 border border-green-400 rounded p-2">
                     <summary className="cursor-pointer font-semibold text-green-800">
                       🧠 AI Insights
                     </summary>
                     <pre className="text-sm text-gray-700 whitespace-pre-wrap mt-2">
-                      {JSON.stringify(record.parsedAI, null, 2)}
+                      {JSON.stringify(
+                        Object.fromEntries(
+                          Object.entries(record).filter(
+                            ([key]) =>
+                              ![
+                                "_id",
+                                "userEmail",
+                                "fileName",
+                                "fileType",
+                                "uploadDate",
+                                "filePath",
+                                "__v"
+                              ].includes(key)
+                          )
+                        ),
+                        null,
+                        2
+                      )}
                     </pre>
                   </details>
                 ) : (

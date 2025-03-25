@@ -21,6 +21,7 @@ aicare-app
     │   ├── tsconfig.build.json
     │   └── tsconfig.json
     ├── cookies.txt
+    ├── cron-local.ts
     ├── debugging-tool.ts
     ├── debug.log
     ├── Dockerfile
@@ -130,22 +131,17 @@ aicare-app
     │   │   ├── 1742863297902-danmkyle_gmail_com.pdf
     │   │   ├── 1742863647571-danmkyle_gmail_com.pdf
     │   │   ├── 1742863935826-danmkyle_gmail_com.pdf
-    │   │   ├── 1742865022811-danmkyle_gmail_com.txt
-    │   │   ├── 1742865028744-danmkyle_gmail_com.rtf
-    │   │   ├── 1742865034253-danmkyle_gmail_com.pdf
-    │   │   ├── 1742865691171-danmkyle_gmail_com.pdf
-    │   │   ├── 1742865773381-danmkyle_gmail_com.png
-    │   │   ├── 1742865860657-danmkyle_gmail_com.txt
-    │   │   ├── 1742865868275-danmkyle_gmail_com.rtf
-    │   │   └── 1742865881737-danmkyle_gmail_com.html
+    │   │   └── 1742865034253-danmkyle_gmail_com.pdf
     │   ├── vercel.svg
     │   └── window.svg
     ├── README.deploy.md
     ├── README.md
+    ├── schema_summary.json
     ├── scripts
     │   ├── build
     │   │   └── generate_code_snapshot.js
     │   ├── generate_code_snapshot.ts
+    │   ├── generateSchema.mjs
     │   └── ocr.ts
     ├── smtp-test.js
     ├── source_code.md
@@ -170,6 +166,8 @@ aicare-app
     │   │   │   │   │   └── route-custom.ts
     │   │   │   │   └── signup
     │   │   │   │       └── route.ts
+    │   │   │   ├── cron
+    │   │   │   │   └── route.ts
     │   │   │   ├── dashboard
     │   │   │   │   └── profile
     │   │   │   │       └── route.ts
@@ -248,12 +246,20 @@ aicare-app
     │   │   ├── Providers.tsx
     │   │   └── Sidebar.tsx
     │   ├── lib
+    │   │   ├── ai
+    │   │   │   └── gptMedicalParser.ts
     │   │   ├── authOptions.ts
     │   │   ├── aws
+    │   │   │   ├── s3Uploader.ts
+    │   │   │   ├── textractParser.ts
     │   │   │   ├── textractTest.ts
     │   │   │   └── textract.ts
+    │   │   ├── cron.ts
     │   │   ├── db
     │   │   │   └── saveParsedRecord.ts
+    │   │   ├── mongodb
+    │   │   │   ├── saveParsedAI.ts
+    │   │   │   └── schemaSummary.ts
     │   │   ├── mongodb.ts
     │   │   └── parser
     │   │       └── parseWithGPT.ts
@@ -274,10 +280,13 @@ aicare-app
     │   │   ├── tesseract.d.ts
     │   │   └── UserProfile.ts
     │   ├── utils
+    │   │   ├── aws
+    │   │   │   └── s3Client.ts
     │   │   ├── db.ts
     │   │   ├── mergeRefs.ts
     │   │   ├── parseMedicalText.ts
     │   │   ├── runDocling.ts
+    │   │   ├── textractClient.ts
     │   │   └── validation.ts
     │   └── workers
     │       └── parseWorker.ts
@@ -43862,11 +43871,11 @@ export async function DELETE(req: NextRequest) {
 ```
 import { NextRequest, NextResponse } from "next/server";
 import jwt from "jsonwebtoken";
-import * as path from "path";
+import path from "path";
 import fs from "fs";
-import * as pdfParse from "pdf-parse/lib/pdf-parse.js";
 import { dbConnect } from "@/lib/mongodb";
 import MedicalRecord from "@/models/MedicalRecord";
+import { parseMedicalRecordWithGPT } from "@/lib/parser/parseWithGPT";
 
 export async function GET(req: NextRequest) {
   await dbConnect();
@@ -43905,56 +43914,24 @@ export async function GET(req: NextRequest) {
       ? record.filePath.slice(1)
       : record.filePath;
     const fullPath = path.join(process.cwd(), "public", relativePath);
-    const buffer = fs.readFileSync(fullPath);
 
-    let extractedText = "";
-
-    if (record.fileType === "application/pdf") {
-      const data = await pdfParse.default(buffer);
-      extractedText = data.text;
-    } else if (["image/jpeg", "image/png"].includes(record.fileType)) {
-      const { spawn } = await import("child_process");
-      const ocr = spawn("npx", ["ts-node", "scripts/ocr.ts", fullPath]);
-
-      const chunks: Buffer[] = [];
-      extractedText = await new Promise<string>((resolve, reject) => {
-        ocr.stdout.on("data", (chunk) => chunks.push(chunk));
-        ocr.stderr.on("data", (err) => console.error("⚠️ OCR stderr:", err.toString()));
-        ocr.on("close", (code) => {
-          if (code !== 0) {
-            reject(new Error(`OCR failed with exit code ${code}`));
-          } else {
-            resolve(Buffer.concat(chunks).toString("utf-8").trim());
-          }
-        });
-      });
-    } else {
-      return NextResponse.json(
-        { error: "Unsupported file type for text extraction" },
-        { status: 400 }
-      );
+    if (!fs.existsSync(fullPath)) {
+      return NextResponse.json({ error: "File not found on server" }, { status: 404 });
     }
 
-    // 🌟 Send extractedText to AI parser
-    const aiRes = await fetch("http://localhost:4000/api/ai/parse", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ extractedText })
-    });
+    // 🌟 Clearly integrate AWS Textract + GPT parsing pipeline
+    const parsedAI = await parseMedicalRecordWithGPT(fullPath);
 
-    const { parsed } = await aiRes.json();
-
-    // Save parsed output into MongoDB
-    record.parsedAI = parsed;
+    // Save parsed output clearly into MongoDB
+    record.parsedAI = parsedAI;
     await record.save();
 
     return NextResponse.json({
-      extractedText,
       parsed: record.parsedAI
     });
   } catch (error) {
     console.error("❌ Text extraction error:", error);
-    return NextResponse.json({ error: "Failed to extract text" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to extract and parse text" }, { status: 500 });
   }
 }
 ```
@@ -43975,7 +43952,7 @@ interface MedicalRecordQuery {
   fileType?: string;
 }
 
-// ✅ Handle file retrieval
+// ✅ Handle file retrieval with enhanced parsedAI integration
 export async function GET(req: NextRequest) {
   await dbConnect();
 
@@ -44055,7 +44032,16 @@ export async function GET(req: NextRequest) {
 
     console.log(`✅ Retrieved ${records.length} Records for ${userEmail}`);
 
-    return NextResponse.json({ records });
+    return NextResponse.json({
+      records: records.map((record) => ({
+        _id: record._id,
+        fileName: record.fileName,
+        fileType: record.fileType,
+        uploadDate: record.uploadDate,
+        filePath: record.filePath,
+        parsedAI: record.parsedAI || null // clearly integrated AI insights
+      }))
+    });
   } catch (error) {
     console.error("❌ Error fetching medical records:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
@@ -44067,53 +44053,41 @@ export async function GET(req: NextRequest) {
 ```
 import { NextRequest, NextResponse } from "next/server";
 import { dbConnect } from "@/lib/mongodb";
-import jwt from "jsonwebtoken"; // ✅ Use JWT to manually decode token
+import jwt from "jsonwebtoken";
 import MedicalRecord from "@/models/MedicalRecord";
-import fs from "fs";
-import path from "path";
 import mime from "mime-types";
+import { uploadFileToS3 } from "@/lib/aws/s3Uploader";
+import { parseDocumentWithTextract } from "@/lib/aws/textractParser";
+import { parseMedicalTextWithGPT } from "@/lib/ai/gptMedicalParser";
+import { generateSchemaSummary } from "@/lib/mongodb/schemaSummary"; // ✅ added import
 
-// ✅ Define allowed file types
 const ALLOWED_TYPES = ["application/pdf", "image/jpeg", "image/png", "application/dicom"];
 
-// ✅ Define upload directory (Local for now, can be migrated to Cloud later)
-const UPLOAD_DIR = path.join(process.cwd(), "public/uploads");
-
-// ✅ Ensure upload directory exists
-if (!fs.existsSync(UPLOAD_DIR)) {
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-}
-
-// ✅ Handle file uploads using `formData()`
 export async function POST(req: NextRequest) {
   await dbConnect();
 
-  // ✅ Extract session manually from request headers
   const authHeader = req.headers.get("Authorization");
-  console.log("🔍 Debug: Received Authorization Header →", authHeader);
+  console.log("🔍 Authorization Header:", authHeader);
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    console.log("❌ No valid Authorization header found.");
     return NextResponse.json({ error: "Unauthorized - No token provided" }, { status: 401 });
   }
 
   const token = authHeader.split(" ")[1];
 
-  let userEmail: string | undefined;
+  let userEmail: string;
 
   try {
     const decodedToken = jwt.verify(token, process.env.NEXTAUTH_SECRET!) as { email?: string };
-    console.log("🔍 Debug: Decoded Token →", decodedToken);
 
     if (!decodedToken.email) {
-      console.log("❌ Token is missing email.");
       return NextResponse.json({ error: "Unauthorized - Token invalid" }, { status: 401 });
     }
 
     userEmail = decodedToken.email;
     console.log("✅ Token Verified: User Email →", userEmail);
   } catch (error) {
-    console.log("❌ JWT Verification Failed:", error);
+    console.error("❌ JWT Verification Failed:", error);
     return NextResponse.json({ error: "Unauthorized - Invalid token" }, { status: 401 });
   }
 
@@ -44125,48 +44099,64 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
-    // ✅ Validate file type
     const fileType = mime.lookup(file.name);
     if (!fileType || !ALLOWED_TYPES.includes(fileType)) {
       return NextResponse.json({ error: "Invalid file type" }, { status: 400 });
     }
 
-    // ✅ Generate unique file name
     const fileExtension = mime.extension(fileType);
-    const sanitizedEmail = userEmail.replace(/[^a-zA-Z0-9]/g, "_"); // ✅ Remove special characters from email
+    const sanitizedEmail = userEmail.replace(/[^a-zA-Z0-9]/g, "_");
     const fileName = `${Date.now()}-${sanitizedEmail}.${fileExtension}`;
-    const filePath = path.join(UPLOAD_DIR, fileName);
 
-    // ✅ Save file manually
-    const buffer = Buffer.from(await file.arrayBuffer());
-    fs.writeFileSync(filePath, buffer);
+    const fileBuffer = Buffer.from(await file.arrayBuffer());
 
-    // ✅ Save metadata to database
+    console.log("🔍 Uploading file to S3:", fileName);
+    const s3Url = await uploadFileToS3(fileBuffer, fileName, fileType);
+    console.log("✅ File successfully uploaded to S3:", s3Url);
+
+    // Textract parsing
+    const textractResult = await parseDocumentWithTextract(
+      "aicare-medical-records-uploads",
+      fileName
+    );
+    console.log("✅ Extracted Text:", textractResult.extractedText);
+
+    // GPT-powered structured parsing with consistent field names
+    const structuredData = await parseMedicalTextWithGPT(textractResult.extractedText);
+    console.log("✅ GPT Structured Data:", structuredData);
+
+    // Save dynamically structured data directly to MongoDB (dynamic schema)
     const newRecord = new MedicalRecord({
       userEmail,
       fileName,
       fileType,
       uploadDate: new Date(),
-      filePath: `/uploads/${fileName}`
+      filePath: s3Url,
+      ...structuredData // Dynamically merge GPT-structured fields
     });
 
-    await newRecord.save();
-    console.log("✅ File uploaded and saved to DB:", newRecord);
+    const savedRecord = await newRecord.save();
+    console.log("✅ Medical record (dynamic structured fields) saved:", savedRecord);
+
+    // ✅ Immediately regenerate schema summary after every upload
+    await generateSchemaSummary();
+    console.log("✅ Schema summary updated after upload.");
 
     return NextResponse.json({
-      message: "File uploaded successfully",
+      message: "File uploaded, parsed, and dynamically stored successfully",
       fileName,
-      filePath
+      filePath: s3Url,
+      parsedAI: structuredData
     });
   } catch (error) {
-    console.error("❌ Error processing file:", error);
+    console.error("❌ Error during file processing:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
 export const config = {
   api: {
-    bodyParser: false // ✅ Required for handling file uploads
+    bodyParser: false
   }
 };
 ```
@@ -44223,6 +44213,51 @@ export async function PATCH(req: NextRequest) {
     console.error("❌ Error updating metadata:", err);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
+}
+```
+
+### /workspaces/aicare/aicare-app/src/app/api/medical-records/upload/route.ts
+```
+import { NextRequest, NextResponse } from "next/server";
+import { Worker } from "worker_threads";
+import path from "path";
+
+export async function POST(req: NextRequest) {
+  const formData = await req.formData();
+  const file = formData.get("file") as File;
+
+  if (!file) {
+    return NextResponse.json({ error: "No file provided." }, { status: 400 });
+  }
+
+  const uploadDir = path.join(process.cwd(), "uploads");
+  const filePath = path.join(uploadDir, file.name);
+
+  // Save file locally
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const fs = await import("fs/promises");
+  await fs.mkdir(uploadDir, { recursive: true });
+  await fs.writeFile(filePath, buffer);
+
+  // Initialize worker to parse document asynchronously
+  const worker = new Worker(path.join(process.cwd(), "src/workers/parseWorker.js"), {
+    workerData: { filePath }
+  });
+
+  worker.on("message", (result) => {
+    if (result.success) {
+      console.log("Parsed Data:", result.data);
+      // TODO: Save parsed data into MongoDB here
+    } else {
+      console.error("Parsing Error:", result.error);
+    }
+  });
+
+  worker.on("error", (error) => {
+    console.error("Worker Error:", error);
+  });
+
+  return NextResponse.json({ message: "File uploaded, parsing in progress." });
 }
 ```
 
@@ -45144,7 +45179,6 @@ export default function Dashboard() {
 
           {activeFeature === "dashboard" && (
             <>
-              {/* Pass the actual data from `profileData` to the PatientProfile */}
               <PatientProfile
                 name={profileData.name}
                 age={profileData.age}
@@ -45170,7 +45204,11 @@ export default function Dashboard() {
             </>
           )}
 
-          {activeFeature === "medicalRecords" && <MedicalRecords />}
+          {activeFeature === "medicalRecords" && (
+            <section className="flex-1 bg-white rounded-lg shadow-md overflow-y-auto p-6">
+              <MedicalRecords />
+            </section>
+          )}
         </div>
       </div>
     </DndProvider>
@@ -45220,148 +45258,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 ```
 "use client";
 
-import { useEffect, useState } from "react";
-
-interface MedicalRecord {
-  _id: string;
-  fileName: string;
-  fileType: string;
-  uploadDate: string;
-  filePath: string;
-}
+import MedicalRecords from "@/components/MedicalRecords";
 
 export default function MedicalRecordsPage() {
-  const [records, setRecords] = useState<MedicalRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [file, setFile] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
-
-  useEffect(() => {
-    fetchMedicalRecords();
-  }, []);
-
-  const fetchMedicalRecords = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/medical-records/retrieve", {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("accessToken")}`
-        }
-      });
-      const data = await res.json();
-      setRecords(data.records || []);
-    } catch (error) {
-      console.error("Error fetching medical records:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files) {
-      setFile(event.target.files[0]);
-    }
-  };
-
-  const handleUpload = async () => {
-    if (!file) return;
-
-    setUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const res = await fetch("/api/medical-records", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("accessToken")}`
-        },
-        body: formData
-      });
-
-      if (res.ok) {
-        fetchMedicalRecords();
-        setFile(null);
-      } else {
-        console.error("Upload failed:", await res.json());
-      }
-    } catch (error) {
-      console.error("Error uploading file:", error);
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    try {
-      const res = await fetch(`/api/medical-records/delete/${id}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("accessToken")}`
-        }
-      });
-
-      if (res.ok) {
-        setRecords(records.filter((record) => record._id !== id));
-      } else {
-        console.error("Delete failed:", await res.json());
-      }
-    } catch (error) {
-      console.error("Error deleting file:", error);
-    }
-  };
-
   return (
     <div className="p-6">
-      <h1 className="text-3xl font-bold mb-4">Medical Records</h1>
-
-      <div className="mb-4">
-        <input type="file" onChange={handleFileChange} className="border p-2 rounded" />
-        <button
-          onClick={handleUpload}
-          disabled={uploading}
-          className="ml-2 bg-blue-500 text-white p-2 rounded"
-        >
-          {uploading ? "Uploading..." : "Upload"}
-        </button>
-      </div>
-
-      {loading ? (
-        <p>Loading medical records...</p>
-      ) : records.length === 0 ? (
-        <p>No medical records found.</p>
-      ) : (
-        <table className="w-full border-collapse border border-gray-300">
-          <thead>
-            <tr className="bg-gray-200">
-              <th className="border p-2">File Name</th>
-              <th className="border p-2">File Type</th>
-              <th className="border p-2">Upload Date</th>
-              <th className="border p-2">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {records.map((record) => (
-              <tr key={record._id} className="border">
-                <td className="border p-2">{record.fileName}</td>
-                <td className="border p-2">{record.fileType}</td>
-                <td className="border p-2">{new Date(record.uploadDate).toLocaleString()}</td>
-                <td className="border p-2">
-                  <a href={record.filePath} download className="text-blue-500 underline">
-                    Download
-                  </a>
-                  <button
-                    onClick={() => handleDelete(record._id)}
-                    className="ml-2 bg-red-500 text-white p-2 rounded"
-                  >
-                    Delete
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      <MedicalRecords />
     </div>
   );
 }
@@ -46077,10 +45979,7 @@ interface MedicalRecord {
   fileType: string;
   uploadDate: string;
   filePath: string;
-}
-
-interface ParsedData {
-  [key: string]: string | number;
+  parsedAI?: Record<string, unknown>;
 }
 
 export default function MedicalRecords() {
@@ -46092,9 +45991,6 @@ export default function MedicalRecords() {
   const [error, setError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [editMap, setEditMap] = useState<Record<string, string>>({});
-  const [extractedMap, setExtractedMap] = useState<Record<string, string>>({});
-  const [parsedMap, setParsedMap] = useState<Record<string, ParsedData>>({});
-  const [loadingExtractId, setLoadingExtractId] = useState<string | null>(null);
 
   const fetchRecords = async () => {
     if (!accessToken) {
@@ -46113,7 +46009,47 @@ export default function MedicalRecords() {
 
       if (!res.ok) throw new Error("Failed to fetch records");
       const data = await res.json();
-      setRecords(data.records);
+
+      // ✅ Map dynamic schema directly to parsedAI for frontend compatibility
+      // ✅ Corrected dynamic schema mapping
+      const records = data.records.map(
+        ({
+          _id,
+          userEmail,
+          fileName,
+          fileType,
+          uploadDate,
+          filePath,
+          __v,
+          patient_name,
+          age,
+          chief_complaint,
+          findings,
+          assessment,
+          plan_medications,
+          plan_follow_up,
+          ...rest
+        }) => ({
+          _id,
+          userEmail,
+          fileName,
+          fileType,
+          uploadDate,
+          filePath,
+          parsedAI: {
+            patient_name,
+            age,
+            chief_complaint,
+            findings,
+            assessment,
+            plan_medications,
+            plan_follow_up,
+            ...rest
+          }
+        })
+      );
+
+      setRecords(records);
     } catch (err) {
       setError("Error fetching medical records.");
       console.error("❌ Fetch Error:", err);
@@ -46148,7 +46084,7 @@ export default function MedicalRecords() {
       });
 
       if (!res.ok) throw new Error("Upload failed");
-      fetchRecords();
+      await fetchRecords();
     } catch (err) {
       setError("Error uploading file.");
       console.error("❌ Upload Error:", err);
@@ -46217,35 +46153,11 @@ export default function MedicalRecords() {
     }
   };
 
-  const handleExtractText = async (id: string) => {
-    if (!accessToken) return;
-
-    setLoadingExtractId(id);
-    try {
-      const res = await fetch(`/api/medical-records/extract?id=${id}`, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`
-        }
-      });
-
-      if (!res.ok) throw new Error("Failed to extract text");
-      const data = await res.json();
-
-      setExtractedMap((prev) => ({ ...prev, [id]: data.extractedText }));
-      setParsedMap((prev) => ({ ...prev, [id]: data.parsed ?? {} }));
-    } catch (err) {
-      setError("Error extracting text.");
-      console.error("❌ Text Extraction Error:", err);
-    } finally {
-      setLoadingExtractId(null);
-    }
-  };
-
   useEffect(() => {
-    if (session?.accessToken) {
+    if (accessToken) {
       fetchRecords();
     }
-  }, [session?.accessToken]);
+  }, [accessToken]);
 
   return (
     <section className="bg-white p-6 rounded-lg shadow-md border border-gray-300">
@@ -46293,40 +46205,38 @@ export default function MedicalRecords() {
                   Download
                 </a>
 
-                {extractedMap[record._id] && (
-                  <div className="mt-2 space-y-2">
-                    <pre className="p-3 bg-white border rounded text-sm text-gray-800 whitespace-pre-wrap max-h-64 overflow-y-auto">
-                      {extractedMap[record._id]}
+                {Object.keys(record).length > 0 ? (
+                  <details className="mt-2 bg-green-50 border border-green-400 rounded p-2">
+                    <summary className="cursor-pointer font-semibold text-green-800">
+                      🧠 AI Insights
+                    </summary>
+                    <pre className="text-sm text-gray-700 whitespace-pre-wrap mt-2">
+                      {JSON.stringify(
+                        Object.fromEntries(
+                          Object.entries(record).filter(
+                            ([key]) =>
+                              ![
+                                "_id",
+                                "userEmail",
+                                "fileName",
+                                "fileType",
+                                "uploadDate",
+                                "filePath",
+                                "__v"
+                              ].includes(key)
+                          )
+                        ),
+                        null,
+                        2
+                      )}
                     </pre>
-
-                    {parsedMap[record._id] && (
-                      <div className="p-3 bg-green-50 border border-green-400 rounded text-sm">
-                        <h3 className="font-semibold mb-2 text-green-800">🧠 AI Insights</h3>
-                        <ul className="space-y-1">
-                          {Object.entries(parsedMap[record._id]).map(([key, value]) => (
-                            <li key={key}>
-                              <span className="font-medium text-gray-700 capitalize">
-                                {key.replace(/_/g, " ")}:
-                              </span>{" "}
-                              <span className="text-gray-900">{value}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
+                  </details>
+                ) : (
+                  <p className="text-sm text-gray-500 italic mt-2">Parsing insights...</p>
                 )}
               </div>
 
               <div className="flex gap-2 flex-wrap">
-                <button
-                  onClick={() => handleExtractText(record._id)}
-                  disabled={loadingExtractId === record._id}
-                  className="bg-purple-600 text-white px-3 py-1 rounded hover:bg-purple-700"
-                >
-                  {loadingExtractId === record._id ? "Extracting..." : "View Text"}
-                </button>
-
                 {editMap[record._id] && editMap[record._id] !== record.fileName && (
                   <button
                     onClick={() => handleSaveMetadata(record._id)}
@@ -47258,6 +47168,185 @@ export const authOptions: NextAuthOptions = {
 };
 ```
 
+### /workspaces/aicare/aicare-app/src/lib/aws/s3Uploader.ts
+```
+import { S3Client } from "@aws-sdk/client-s3";
+import { Upload } from "@aws-sdk/lib-storage";
+
+const s3Client = new S3Client({
+  region: "us-east-2"
+});
+
+export async function uploadFileToS3(
+  file: Buffer,
+  fileName: string,
+  contentType: string
+): Promise<string> {
+  const params = {
+    Bucket: "aicare-medical-records-uploads",
+    Key: fileName,
+    Body: file,
+    ContentType: contentType
+  };
+
+  const upload = new Upload({
+    client: s3Client,
+    params
+  });
+
+  try {
+    await upload.done();
+    return `https://aicare-medical-records-uploads.s3.us-east-2.amazonaws.com/${fileName}`;
+  } catch (error) {
+    console.error("S3 Upload Error:", error);
+    throw error;
+  }
+}
+```
+
+### /workspaces/aicare/aicare-app/src/lib/aws/textractParser.ts
+```
+import {
+  TextractClient,
+  AnalyzeDocumentCommand,
+  AnalyzeDocumentCommandOutput,
+  FeatureType,
+  BlockType
+} from "@aws-sdk/client-textract";
+
+const textractClient = new TextractClient({ region: "us-east-2" });
+
+function extractTextFromBlocks(textractData: AnalyzeDocumentCommandOutput): string {
+  return (
+    textractData.Blocks?.filter((block) => block.BlockType === BlockType.LINE)
+      .map((block) => block.Text)
+      .join("\n") || ""
+  );
+}
+
+export async function parseDocumentWithTextract(s3Bucket: string, documentName: string) {
+  const params = {
+    Document: {
+      S3Object: {
+        Bucket: s3Bucket,
+        Name: documentName
+      }
+    },
+    FeatureTypes: [FeatureType.FORMS, FeatureType.TABLES] // ✅ Fixed to use correct enum values
+  };
+
+  try {
+    const command = new AnalyzeDocumentCommand(params);
+    const response = await textractClient.send(command);
+
+    const extractedText = extractTextFromBlocks(response);
+
+    return { extractedText };
+  } catch (error) {
+    console.error("Textract Parsing Error:", error);
+    throw error;
+  }
+}
+```
+
+### /workspaces/aicare/aicare-app/src/lib/aws/textractTest.ts
+```
+import { TextractClient, DetectDocumentTextCommand } from "@aws-sdk/client-textract";
+import fs from "fs";
+import path from "path";
+
+const client = new TextractClient({ region: "us-east-1" });
+
+async function detectText(filePath: string) {
+  const fileBytes = fs.readFileSync(path.resolve(filePath));
+
+  const command = new DetectDocumentTextCommand({
+    Document: { Bytes: fileBytes }
+  });
+
+  try {
+    const response = await client.send(command);
+    console.log("Detected text:", response.Blocks?.map((block) => block.Text).join("\n"));
+  } catch (error) {
+    console.error("Error detecting text:", error);
+  }
+}
+
+// Replace 'your-file-path.png' with a real image file for testing
+detectText("/workspaces/aicare/record_ai.png");
+```
+
+### /workspaces/aicare/aicare-app/src/lib/aws/textract.ts
+```
+import { TextractClient, DetectDocumentTextCommand } from "@aws-sdk/client-textract";
+import fs from "fs";
+import path from "path";
+
+const client = new TextractClient({ region: "us-east-1" });
+
+export async function extractTextFromDocument(filePath: string): Promise<string> {
+  const fileBytes = fs.readFileSync(path.resolve(filePath));
+
+  const command = new DetectDocumentTextCommand({
+    Document: { Bytes: fileBytes }
+  });
+
+  const response = await client.send(command);
+
+  return response.Blocks?.map((block) => block.Text).join("\n") || "";
+}
+```
+
+### /workspaces/aicare/aicare-app/src/lib/db/saveParsedRecord.ts
+```
+import { dbConnect } from "@/lib/mongodb";
+
+export async function saveParsedRecord(parsedData: Record<string, unknown>) {
+  const conn = await dbConnect();
+
+  const MedicalRecord = conn.collection("medical_records");
+
+  const result = await MedicalRecord.insertOne({
+    ...parsedData,
+    createdAt: new Date()
+  });
+
+  return result.insertedId;
+}
+```
+
+### /workspaces/aicare/aicare-app/src/lib/mongodb/saveParsedAI.ts
+```
+import { MongoClient, ObjectId } from "mongodb";
+
+const mongoUri = process.env.MONGODB_URI || "mongodb://localhost:27017";
+const dbName = "AiCare";
+const collectionName = "medicalRecords";
+
+export default async function saveParsedAI(recordId: string, parsedAI: Record<string, unknown>) {
+  const client = new MongoClient(mongoUri);
+
+  try {
+    await client.connect();
+    const db = client.db(dbName);
+    const collection = db.collection(collectionName);
+
+    await collection.updateOne(
+      { _id: new ObjectId(recordId) },
+      { $set: { parsedAI } },
+      { upsert: true }
+    );
+
+    console.log("✅ Parsed AI successfully stored in MongoDB.");
+  } catch (error) {
+    console.error("❌ MongoDB Save Error:", error);
+    throw error;
+  } finally {
+    await client.close();
+  }
+}
+```
+
 ### /workspaces/aicare/aicare-app/src/lib/mongodb.ts
 ```
 /* eslint-disable no-var */
@@ -47312,6 +47401,45 @@ export async function dbConnect(): Promise<mongoose.Connection> {
   cached.conn = await cached.promise;
   globalThis.mongooseCache = cached;
   return cached.conn;
+}
+```
+
+### /workspaces/aicare/aicare-app/src/lib/parser/parseWithGPT.ts
+```
+import { extractTextFromDocument } from "@/lib/aws/textract";
+import OpenAI from "openai";
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+export async function parseMedicalRecordWithGPT(filePath: string) {
+  const extractedText = await extractTextFromDocument(filePath);
+
+  const prompt = `
+    Extract all relevant medical information from the provided text and return it as a structured JSON object.
+    Do not wrap the response in markdown or code blocks. Return pure JSON.
+
+    Document Text:
+    ${extractedText}
+
+    Structured Medical JSON:
+  `;
+
+  const completion = await openai.chat.completions.create({
+    model: "gpt-4-turbo",
+    messages: [{ role: "user", content: prompt }],
+    temperature: 0
+  });
+
+  const jsonData = completion.choices[0].message.content;
+
+  if (!jsonData) {
+    throw new Error("GPT response is empty");
+  }
+
+  // Clean markdown formatting if present
+  const cleanJsonData = jsonData.replace(/^```json\s*|```$/g, "").trim();
+
+  return JSON.parse(cleanJsonData);
 }
 ```
 
@@ -47397,17 +47525,19 @@ export interface IMedicalRecord extends Document {
   fileType: string;
   uploadDate: Date;
   filePath: string;
-  parsedAI?: Record<string, any>; // ✅ new field for storing GPT output
+  [key: string]: unknown; // Allow dynamic fields
 }
 
-const MedicalRecordSchema = new Schema<IMedicalRecord>({
-  userEmail: { type: String, required: true },
-  fileName: { type: String, required: true },
-  fileType: { type: String, required: true },
-  uploadDate: { type: Date, default: Date.now },
-  filePath: { type: String, required: true },
-  parsedAI: { type: Schema.Types.Mixed, default: {} } // ✅ flexible JSON field
-});
+const MedicalRecordSchema = new Schema<IMedicalRecord>(
+  {
+    userEmail: { type: String, required: true },
+    fileName: { type: String, required: true },
+    fileType: { type: String, required: true },
+    uploadDate: { type: Date, default: Date.now },
+    filePath: { type: String, required: true }
+  },
+  { strict: false } // Enable dynamic schema
+);
 
 const MedicalRecord =
   mongoose.models.MedicalRecord ||
@@ -47671,6 +47801,21 @@ export interface UserProfile {
 }
 ```
 
+### /workspaces/aicare/aicare-app/src/utils/aws/s3Client.ts
+```
+import { S3Client } from "@aws-sdk/client-s3";
+
+const s3Client = new S3Client({
+  region: process.env.AWS_REGION!,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!
+  }
+});
+
+export default s3Client;
+```
+
 ### /workspaces/aicare/aicare-app/src/utils/db.ts
 ```
 import mongoose from "mongoose";
@@ -47842,6 +47987,21 @@ export function runDocling(filePath: string): Promise<Record<string, unknown>> {
 }
 ```
 
+### /workspaces/aicare/aicare-app/src/utils/textractClient.ts
+```
+import { TextractClient } from "@aws-sdk/client-textract";
+
+const textractClient = new TextractClient({
+  region: process.env.AWS_REGION,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!
+  }
+});
+
+export default textractClient;
+```
+
 ### /workspaces/aicare/aicare-app/src/utils/validation.ts
 ```
 export function validatePassword(password: string, returnArray = false): string | string[] | null {
@@ -47866,5 +48026,25 @@ export function validatePassword(password: string, returnArray = false): string 
   if (returnArray) return errors;
   return errors.length > 0 ? errors[0] : null; // Return first error or null if valid
 }
+```
+
+### /workspaces/aicare/aicare-app/src/workers/parseWorker.ts
+```
+import { parentPort, workerData } from "worker_threads";
+import { parseMedicalRecordWithGPT } from "@/lib/parser/parseWithGPT";
+import { saveParsedRecord } from "@/lib/db/saveParsedRecord";
+
+async function parseAndSaveDocument(filePath: string) {
+  try {
+    const parsedData = await parseMedicalRecordWithGPT(filePath);
+    const recordId = await saveParsedRecord(parsedData);
+
+    parentPort?.postMessage({ success: true, recordId });
+  } catch (error) {
+    parentPort?.postMessage({ success: false, error: (error as Error).message });
+  }
+}
+
+parseAndSaveDocument(workerData.filePath);
 ```
 

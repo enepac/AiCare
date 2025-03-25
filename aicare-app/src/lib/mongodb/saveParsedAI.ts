@@ -1,14 +1,10 @@
 import { MongoClient, ObjectId } from "mongodb";
-import { AnalyzeDocumentCommandOutput } from "@aws-sdk/client-textract";
 
 const mongoUri = process.env.MONGODB_URI || "mongodb://localhost:27017";
 const dbName = "AiCare";
 const collectionName = "medicalRecords";
 
-export default async function saveParsedAI(
-  recordId: string,
-  parsedAI: AnalyzeDocumentCommandOutput
-) {
+export default async function saveParsedAI(recordId: string, parsedAI: Record<string, unknown>) {
   const client = new MongoClient(mongoUri);
 
   try {

@@ -44,7 +44,6 @@ export async function GET(req: NextRequest) {
 
     console.log("🔍 Debug: Decoded Token →", decodedToken);
 
-    // ✅ Ensure token is not expired
     if (!decodedToken || !decodedToken.email) {
       console.warn("❌ Unauthorized request: Invalid token structure.");
       return NextResponse.json({ error: "Unauthorized - Invalid token" }, { status: 401 });
@@ -65,22 +64,19 @@ export async function GET(req: NextRequest) {
   try {
     // ✅ Extract and validate query parameters
     const url = new URL(req.url);
-    const fileType = url.searchParams.get("type") || undefined; // Optional file type filter
-    const limit = Number(url.searchParams.get("limit")) || 10; // Optional limit (default: 10)
+    const fileType = url.searchParams.get("type") || undefined;
+    const limit = Number(url.searchParams.get("limit")) || 10;
 
-    // ✅ Validate file type (only allow predefined types)
     if (fileType && !ALLOWED_FILE_TYPES.includes(fileType)) {
       console.warn(`❌ Invalid file type requested: ${fileType}`);
       return NextResponse.json({ error: "Invalid file type" }, { status: 400 });
     }
 
-    // ✅ Validate limit (ensure reasonable range)
     if (isNaN(limit) || limit < 1 || limit > 100) {
       console.warn(`❌ Invalid limit requested: ${limit}`);
       return NextResponse.json({ error: "Limit must be between 1 and 100" }, { status: 400 });
     }
 
-    // ✅ Use a strictly typed query
     const query: MedicalRecordQuery = { userEmail };
     if (fileType) {
       query.fileType = fileType;
@@ -88,19 +84,22 @@ export async function GET(req: NextRequest) {
 
     console.log("🔍 Debug: Querying DB with →", query);
 
-    const records = await MedicalRecord.find(query).limit(limit).sort({ uploadDate: -1 });
+    const records = await MedicalRecord.find(query).limit(limit).sort({ uploadDate: -1 }).lean();
 
     console.log(`✅ Retrieved ${records.length} Records for ${userEmail}`);
 
     return NextResponse.json({
-      records: records.map((record) => ({
-        _id: record._id,
-        fileName: record.fileName,
-        fileType: record.fileType,
-        uploadDate: record.uploadDate,
-        filePath: record.filePath,
-        parsedAI: record.parsedAI || null // clearly integrated AI insights
-      }))
+      records: records.map(
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        ({ _id, fileName, fileType, uploadDate, filePath, userEmail, __v, ...dynamicFields }) => ({
+          _id,
+          fileName,
+          fileType,
+          uploadDate,
+          filePath,
+          parsedAI: dynamicFields
+        })
+      )
     });
   } catch (error) {
     console.error("❌ Error fetching medical records:", error);
