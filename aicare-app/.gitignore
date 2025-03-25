@@ -35,3 +35,8 @@ public/uploads/
 
 # Ignore related notes not meant for commit
 ../related_codes.md
+
+# Large files and temp output
+filtered_structure.txt
+*.tmp
+*.bak
