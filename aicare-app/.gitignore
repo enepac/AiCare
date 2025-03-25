@@ -26,3 +26,12 @@ yarn-error.log*
 docker-compose.override.yml
 .vercel
 .venv-docling/
+
+# Ignore uploaded files
+public/uploads/
+
+# Ignore test files from project root
+../record_ai.*
+
+# Ignore related notes not meant for commit
+../related_codes.md
