@@ -79,7 +79,6 @@ export default function Dashboard() {
 
           {activeFeature === "dashboard" && (
             <>
-              {/* Pass the actual data from `profileData` to the PatientProfile */}
               <PatientProfile
                 name={profileData.name}
                 age={profileData.age}
@@ -105,7 +104,11 @@ export default function Dashboard() {
             </>
           )}
 
-          {activeFeature === "medicalRecords" && <MedicalRecords />}
+          {activeFeature === "medicalRecords" && (
+            <section className="flex-1 bg-white rounded-lg shadow-md overflow-y-auto p-6">
+              <MedicalRecords />
+            </section>
+          )}
         </div>
       </div>
     </DndProvider>

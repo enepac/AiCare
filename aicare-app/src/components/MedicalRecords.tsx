@@ -9,10 +9,7 @@ interface MedicalRecord {
   fileType: string;
   uploadDate: string;
   filePath: string;
-}
-
-interface ParsedData {
-  [key: string]: string | number;
+  parsedAI?: Record<string, unknown>;
 }
 
 export default function MedicalRecords() {
@@ -24,9 +21,6 @@ export default function MedicalRecords() {
   const [error, setError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [editMap, setEditMap] = useState<Record<string, string>>({});
-  const [extractedMap, setExtractedMap] = useState<Record<string, string>>({});
-  const [parsedMap, setParsedMap] = useState<Record<string, ParsedData>>({});
-  const [loadingExtractId, setLoadingExtractId] = useState<string | null>(null);
 
   const fetchRecords = async () => {
     if (!accessToken) {
@@ -80,7 +74,7 @@ export default function MedicalRecords() {
       });
 
       if (!res.ok) throw new Error("Upload failed");
-      fetchRecords();
+      await fetchRecords();
     } catch (err) {
       setError("Error uploading file.");
       console.error("❌ Upload Error:", err);
@@ -149,35 +143,11 @@ export default function MedicalRecords() {
     }
   };
 
-  const handleExtractText = async (id: string) => {
-    if (!accessToken) return;
-
-    setLoadingExtractId(id);
-    try {
-      const res = await fetch(`/api/medical-records/extract?id=${id}`, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`
-        }
-      });
-
-      if (!res.ok) throw new Error("Failed to extract text");
-      const data = await res.json();
-
-      setExtractedMap((prev) => ({ ...prev, [id]: data.extractedText }));
-      setParsedMap((prev) => ({ ...prev, [id]: data.parsed ?? {} }));
-    } catch (err) {
-      setError("Error extracting text.");
-      console.error("❌ Text Extraction Error:", err);
-    } finally {
-      setLoadingExtractId(null);
-    }
-  };
-
   useEffect(() => {
-    if (session?.accessToken) {
+    if (accessToken) {
       fetchRecords();
     }
-  }, [session?.accessToken]);
+  }, [accessToken]);
 
   return (
     <section className="bg-white p-6 rounded-lg shadow-md border border-gray-300">
@@ -225,40 +195,21 @@ export default function MedicalRecords() {
                   Download
                 </a>
 
-                {extractedMap[record._id] && (
-                  <div className="mt-2 space-y-2">
-                    <pre className="p-3 bg-white border rounded text-sm text-gray-800 whitespace-pre-wrap max-h-64 overflow-y-auto">
-                      {extractedMap[record._id]}
+                {record.parsedAI ? (
+                  <details className="mt-2 bg-green-50 border border-green-400 rounded p-2">
+                    <summary className="cursor-pointer font-semibold text-green-800">
+                      🧠 AI Insights
+                    </summary>
+                    <pre className="text-sm text-gray-700 whitespace-pre-wrap mt-2">
+                      {JSON.stringify(record.parsedAI, null, 2)}
                     </pre>
-
-                    {parsedMap[record._id] && (
-                      <div className="p-3 bg-green-50 border border-green-400 rounded text-sm">
-                        <h3 className="font-semibold mb-2 text-green-800">🧠 AI Insights</h3>
-                        <ul className="space-y-1">
-                          {Object.entries(parsedMap[record._id]).map(([key, value]) => (
-                            <li key={key}>
-                              <span className="font-medium text-gray-700 capitalize">
-                                {key.replace(/_/g, " ")}:
-                              </span>{" "}
-                              <span className="text-gray-900">{value}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
+                  </details>
+                ) : (
+                  <p className="text-sm text-gray-500 italic mt-2">Parsing insights...</p>
                 )}
               </div>
 
               <div className="flex gap-2 flex-wrap">
-                <button
-                  onClick={() => handleExtractText(record._id)}
-                  disabled={loadingExtractId === record._id}
-                  className="bg-purple-600 text-white px-3 py-1 rounded hover:bg-purple-700"
-                >
-                  {loadingExtractId === record._id ? "Extracting..." : "View Text"}
-                </button>
-
                 {editMap[record._id] && editMap[record._id] !== record.fileName && (
                   <button
                     onClick={() => handleSaveMetadata(record._id)}

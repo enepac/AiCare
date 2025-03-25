@@ -12,7 +12,7 @@ interface MedicalRecordQuery {
   fileType?: string;
 }
 
-// ✅ Handle file retrieval
+// ✅ Handle file retrieval with enhanced parsedAI integration
 export async function GET(req: NextRequest) {
   await dbConnect();
 
@@ -92,7 +92,16 @@ export async function GET(req: NextRequest) {
 
     console.log(`✅ Retrieved ${records.length} Records for ${userEmail}`);
 
-    return NextResponse.json({ records });
+    return NextResponse.json({
+      records: records.map((record) => ({
+        _id: record._id,
+        fileName: record.fileName,
+        fileType: record.fileType,
+        uploadDate: record.uploadDate,
+        filePath: record.filePath,
+        parsedAI: record.parsedAI || null // clearly integrated AI insights
+      }))
+    });
   } catch (error) {
     console.error("❌ Error fetching medical records:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

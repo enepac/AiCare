@@ -15,8 +15,6 @@ interface MongooseCache {
 
 // ✅ Explicitly extend `globalThis` to avoid TypeScript errors
 declare global {
-  // Use `var` here to ensure it's declared in the global scope
-
   var mongooseCache: MongooseCache | undefined;
 }
 
@@ -39,9 +37,9 @@ export async function dbConnect(): Promise<mongoose.Connection> {
         dbName: "AiCareDB",
         bufferCommands: false
       })
-      .then((mongoose) => {
+      .then((mongooseInstance) => {
         console.log("✅ Successfully connected to MongoDB");
-        return mongoose.connection;
+        return mongooseInstance.connection;
       })
       .catch((error) => {
         console.error("❌ MongoDB connection error:", error);
@@ -50,6 +48,6 @@ export async function dbConnect(): Promise<mongoose.Connection> {
   }
 
   cached.conn = await cached.promise;
-  globalThis.mongooseCache = cached; // ✅ Properly assigning to `globalThis`
+  globalThis.mongooseCache = cached;
   return cached.conn;
 }

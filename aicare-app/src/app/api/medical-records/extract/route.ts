@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import jwt from "jsonwebtoken";
-import * as path from "path";
+import path from "path";
 import fs from "fs";
-import * as pdfParse from "pdf-parse/lib/pdf-parse.js";
 import { dbConnect } from "@/lib/mongodb";
 import MedicalRecord from "@/models/MedicalRecord";
+import { parseMedicalRecordWithGPT } from "@/lib/parser/parseWithGPT";
 
 export async function GET(req: NextRequest) {
   await dbConnect();
@@ -43,55 +43,23 @@ export async function GET(req: NextRequest) {
       ? record.filePath.slice(1)
       : record.filePath;
     const fullPath = path.join(process.cwd(), "public", relativePath);
-    const buffer = fs.readFileSync(fullPath);
 
-    let extractedText = "";
-
-    if (record.fileType === "application/pdf") {
-      const data = await pdfParse.default(buffer);
-      extractedText = data.text;
-    } else if (["image/jpeg", "image/png"].includes(record.fileType)) {
-      const { spawn } = await import("child_process");
-      const ocr = spawn("npx", ["ts-node", "scripts/ocr.ts", fullPath]);
-
-      const chunks: Buffer[] = [];
-      extractedText = await new Promise<string>((resolve, reject) => {
-        ocr.stdout.on("data", (chunk) => chunks.push(chunk));
-        ocr.stderr.on("data", (err) => console.error("⚠️ OCR stderr:", err.toString()));
-        ocr.on("close", (code) => {
-          if (code !== 0) {
-            reject(new Error(`OCR failed with exit code ${code}`));
-          } else {
-            resolve(Buffer.concat(chunks).toString("utf-8").trim());
-          }
-        });
-      });
-    } else {
-      return NextResponse.json(
-        { error: "Unsupported file type for text extraction" },
-        { status: 400 }
-      );
+    if (!fs.existsSync(fullPath)) {
+      return NextResponse.json({ error: "File not found on server" }, { status: 404 });
     }
 
-    // 🌟 Send extractedText to AI parser
-    const aiRes = await fetch("http://localhost:4000/api/ai/parse", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ extractedText })
-    });
+    // 🌟 Clearly integrate AWS Textract + GPT parsing pipeline
+    const parsedAI = await parseMedicalRecordWithGPT(fullPath);
 
-    const { parsed } = await aiRes.json();
-
-    // Save parsed output into MongoDB
-    record.parsedAI = parsed;
+    // Save parsed output clearly into MongoDB
+    record.parsedAI = parsedAI;
     await record.save();
 
     return NextResponse.json({
-      extractedText,
       parsed: record.parsedAI
     });
   } catch (error) {
     console.error("❌ Text extraction error:", error);
-    return NextResponse.json({ error: "Failed to extract text" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to extract and parse text" }, { status: 500 });
   }
 }

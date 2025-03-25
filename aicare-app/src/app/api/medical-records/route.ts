@@ -1,52 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
 import { dbConnect } from "@/lib/mongodb";
-import jwt from "jsonwebtoken"; // ✅ Use JWT to manually decode token
+import jwt from "jsonwebtoken";
 import MedicalRecord from "@/models/MedicalRecord";
-import fs from "fs";
-import path from "path";
 import mime from "mime-types";
+import { uploadFileToS3 } from "@/lib/aws/s3Uploader";
+import { parseDocumentWithTextract } from "@/lib/aws/textractParser";
+import saveParsedAI from "@/lib/mongodb/saveParsedAI";
 
-// ✅ Define allowed file types
 const ALLOWED_TYPES = ["application/pdf", "image/jpeg", "image/png", "application/dicom"];
 
-// ✅ Define upload directory (Local for now, can be migrated to Cloud later)
-const UPLOAD_DIR = path.join(process.cwd(), "public/uploads");
-
-// ✅ Ensure upload directory exists
-if (!fs.existsSync(UPLOAD_DIR)) {
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-}
-
-// ✅ Handle file uploads using `formData()`
 export async function POST(req: NextRequest) {
   await dbConnect();
 
-  // ✅ Extract session manually from request headers
   const authHeader = req.headers.get("Authorization");
-  console.log("🔍 Debug: Received Authorization Header →", authHeader);
+  console.log("🔍 Authorization Header:", authHeader);
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    console.log("❌ No valid Authorization header found.");
     return NextResponse.json({ error: "Unauthorized - No token provided" }, { status: 401 });
   }
 
   const token = authHeader.split(" ")[1];
 
-  let userEmail: string | undefined;
+  let userEmail: string;
 
   try {
     const decodedToken = jwt.verify(token, process.env.NEXTAUTH_SECRET!) as { email?: string };
-    console.log("🔍 Debug: Decoded Token →", decodedToken);
 
     if (!decodedToken.email) {
-      console.log("❌ Token is missing email.");
       return NextResponse.json({ error: "Unauthorized - Token invalid" }, { status: 401 });
     }
 
     userEmail = decodedToken.email;
     console.log("✅ Token Verified: User Email →", userEmail);
   } catch (error) {
-    console.log("❌ JWT Verification Failed:", error);
+    console.error("❌ JWT Verification Failed:", error);
     return NextResponse.json({ error: "Unauthorized - Invalid token" }, { status: 401 });
   }
 
@@ -58,47 +45,56 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
-    // ✅ Validate file type
     const fileType = mime.lookup(file.name);
     if (!fileType || !ALLOWED_TYPES.includes(fileType)) {
       return NextResponse.json({ error: "Invalid file type" }, { status: 400 });
     }
 
-    // ✅ Generate unique file name
     const fileExtension = mime.extension(fileType);
-    const sanitizedEmail = userEmail.replace(/[^a-zA-Z0-9]/g, "_"); // ✅ Remove special characters from email
+    const sanitizedEmail = userEmail.replace(/[^a-zA-Z0-9]/g, "_");
     const fileName = `${Date.now()}-${sanitizedEmail}.${fileExtension}`;
-    const filePath = path.join(UPLOAD_DIR, fileName);
 
-    // ✅ Save file manually
-    const buffer = Buffer.from(await file.arrayBuffer());
-    fs.writeFileSync(filePath, buffer);
+    const fileBuffer = Buffer.from(await file.arrayBuffer());
 
-    // ✅ Save metadata to database
+    console.log("🔍 Uploading file to S3:", fileName);
+    const s3Url = await uploadFileToS3(fileBuffer, fileName, fileType);
+    console.log("✅ File successfully uploaded to S3:", s3Url);
+
+    const textractResult = await parseDocumentWithTextract(
+      "aicare-medical-records-uploads",
+      fileName
+    );
+    console.log("✅ Textract Response:", JSON.stringify(textractResult, null, 2));
+
     const newRecord = new MedicalRecord({
       userEmail,
       fileName,
       fileType,
       uploadDate: new Date(),
-      filePath: `/uploads/${fileName}`
+      filePath: s3Url,
+      parsedAI: textractResult
     });
 
-    await newRecord.save();
-    console.log("✅ File uploaded and saved to DB:", newRecord);
+    const savedRecord = await newRecord.save();
+    console.log("✅ Record saved to MongoDB:", savedRecord);
+
+    await saveParsedAI(savedRecord._id.toString(), textractResult);
+    console.log("✅ Parsed AI stored successfully.");
 
     return NextResponse.json({
-      message: "File uploaded successfully",
+      message: "File uploaded, parsed, and saved successfully",
       fileName,
-      filePath
+      filePath: s3Url,
+      parsedAI: textractResult
     });
   } catch (error) {
-    console.error("❌ Error processing file:", error);
+    console.error("❌ Error during file processing:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
 export const config = {
   api: {
-    bodyParser: false // ✅ Required for handling file uploads
+    bodyParser: false
   }
 };
