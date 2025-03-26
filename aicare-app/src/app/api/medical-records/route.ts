@@ -7,9 +7,9 @@ import { uploadFileToS3 } from "@/lib/aws/s3Uploader";
 import { parseDocumentWithTextract } from "@/lib/aws/textractParser";
 import { parseMedicalTextWithGPT } from "@/lib/ai/gptMedicalParser";
 import { generateSchemaSummary } from "@/lib/mongodb/schemaSummary";
-import { parseDocx } from "@/lib/fileParsers/parseDocx"; // ✅ explicit DOCX parser import
-import { parseRtfWithDocling } from "@/lib/fileParsers/parseRtfDocling"; // ✅ explicit Docling parser import
-import { convert } from "html-to-text";
+import { parseDocx } from "@/lib/fileParsers/parseDocx";
+import { parseRtfWithDocling } from "@/lib/fileParsers/parseRtfDocling";
+import { parseHtmlCheerio } from "@/lib/fileParsers/parseHtmlCheerio";
 
 const ALLOWED_FILE_TYPES = [
   "application/pdf",
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
     }
 
     const fileType = file.type;
-    console.log("🔍 Explicit File MIME Type:", fileType); // explicitly log the MIME type
+    console.log("🔍 Explicit File MIME Type:", fileType);
 
     if (!ALLOWED_FILE_TYPES.includes(fileType)) {
       return NextResponse.json({ error: "Invalid file type uploaded" }, { status: 400 });
@@ -81,8 +81,6 @@ export async function POST(req: NextRequest) {
 
     let extractedText = "";
 
-    // Explicit conditional parsing based on File Type
-    // Explicit parsing condition:
     if (["application/pdf", "image/jpeg", "image/png"].includes(fileType)) {
       const textractResult = await parseDocumentWithTextract(
         "aicare-medical-records-uploads",
@@ -98,20 +96,17 @@ export async function POST(req: NextRequest) {
     } else if (["text/plain", "text/csv"].includes(fileType)) {
       extractedText = fileBuffer.toString("utf-8");
     } else if (fileType === "text/html") {
-      // ✅ explicitly handle HTML parsing
       const htmlContent = fileBuffer.toString("utf-8");
-      extractedText = convert(htmlContent, { wordwrap: false });
+      extractedText = await parseHtmlCheerio(htmlContent);
     } else {
       return NextResponse.json({ error: "Unsupported file type for parsing" }, { status: 400 });
     }
 
     console.log("✅ Extracted Text:", extractedText);
 
-    // GPT-powered structured parsing
     const structuredData = await parseMedicalTextWithGPT(extractedText);
     console.log("✅ GPT Structured Data:", structuredData);
 
-    // Save dynamically structured data directly to MongoDB
     const newRecord = new MedicalRecord({
       userEmail,
       fileName,
@@ -124,7 +119,6 @@ export async function POST(req: NextRequest) {
     const savedRecord = await newRecord.save();
     console.log("✅ Medical record (dynamic structured fields) saved:", savedRecord);
 
-    // Regenerate schema summary after every upload
     await generateSchemaSummary();
     console.log("✅ Schema summary updated after upload.");
 
