@@ -6,9 +6,22 @@ import mime from "mime-types";
 import { uploadFileToS3 } from "@/lib/aws/s3Uploader";
 import { parseDocumentWithTextract } from "@/lib/aws/textractParser";
 import { parseMedicalTextWithGPT } from "@/lib/ai/gptMedicalParser";
-import { generateSchemaSummary } from "@/lib/mongodb/schemaSummary"; // ✅ added import
+import { generateSchemaSummary } from "@/lib/mongodb/schemaSummary";
+import { parseDocx } from "@/lib/fileParsers/parseDocx"; // ✅ explicit DOCX parser import
+import { parseRtf } from "@/lib/fileParsers/parseRtf"; // ✅ explicit RTF parser import
 
-const ALLOWED_TYPES = ["application/pdf", "image/jpeg", "image/png", "application/dicom"];
+const ALLOWED_FILE_TYPES = [
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "application/dicom",
+  "text/plain",
+  "text/csv",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/rtf",
+  "text/rtf" // ✅ explicitly add this line
+];
 
 export async function POST(req: NextRequest) {
   await dbConnect();
@@ -46,9 +59,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
-    const fileType = mime.lookup(file.name);
-    if (!fileType || !ALLOWED_TYPES.includes(fileType)) {
-      return NextResponse.json({ error: "Invalid file type" }, { status: 400 });
+    const fileType = file.type;
+
+    if (!ALLOWED_FILE_TYPES.includes(fileType)) {
+      return NextResponse.json({ error: "Invalid file type uploaded" }, { status: 400 });
     }
 
     const fileExtension = mime.extension(fileType);
@@ -61,31 +75,47 @@ export async function POST(req: NextRequest) {
     const s3Url = await uploadFileToS3(fileBuffer, fileName, fileType);
     console.log("✅ File successfully uploaded to S3:", s3Url);
 
-    // Textract parsing
-    const textractResult = await parseDocumentWithTextract(
-      "aicare-medical-records-uploads",
-      fileName
-    );
-    console.log("✅ Extracted Text:", textractResult.extractedText);
+    let extractedText = "";
 
-    // GPT-powered structured parsing with consistent field names
-    const structuredData = await parseMedicalTextWithGPT(textractResult.extractedText);
+    // Conditional Parsing based on File Type
+    if (["application/pdf", "image/jpeg", "image/png"].includes(fileType)) {
+      const textractResult = await parseDocumentWithTextract(
+        "aicare-medical-records-uploads",
+        fileName
+      );
+      extractedText = textractResult.extractedText;
+    } else if (
+      fileType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    ) {
+      extractedText = await parseDocx(fileBuffer); // ✅ explicit DOCX parsing
+    } else if (fileType === "application/rtf") {
+      extractedText = await parseRtf(fileBuffer); // ✅ explicit RTF parsing
+    } else if (["text/plain", "text/csv"].includes(fileType)) {
+      extractedText = fileBuffer.toString("utf-8"); // ✅ explicit TXT/CSV parsing
+    } else {
+      return NextResponse.json({ error: "Unsupported file type for parsing" }, { status: 400 });
+    }
+
+    console.log("✅ Extracted Text:", extractedText);
+
+    // GPT-powered structured parsing
+    const structuredData = await parseMedicalTextWithGPT(extractedText);
     console.log("✅ GPT Structured Data:", structuredData);
 
-    // Save dynamically structured data directly to MongoDB (dynamic schema)
+    // Save dynamically structured data directly to MongoDB
     const newRecord = new MedicalRecord({
       userEmail,
       fileName,
       fileType,
       uploadDate: new Date(),
       filePath: s3Url,
-      ...structuredData // Dynamically merge GPT-structured fields
+      ...structuredData
     });
 
     const savedRecord = await newRecord.save();
     console.log("✅ Medical record (dynamic structured fields) saved:", savedRecord);
 
-    // ✅ Immediately regenerate schema summary after every upload
+    // Regenerate schema summary after every upload
     await generateSchemaSummary();
     console.log("✅ Schema summary updated after upload.");
 
@@ -97,7 +127,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error("❌ Error during file processing:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json({ error: error.message || "Internal server error" }, { status: 500 });
   }
 }
 

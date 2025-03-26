@@ -91,7 +91,12 @@ export default function MedicalRecords() {
         body: formData
       });
 
-      if (!res.ok) throw new Error("Upload failed");
+      if (!res.ok) {
+        const errorResponse = await res.json();
+        console.error("Backend Error explicitly:", errorResponse);
+        throw new Error(errorResponse.error || "Upload failed");
+      }
+
       await fetchRecords();
     } catch (err) {
       setError("Error uploading file.");
