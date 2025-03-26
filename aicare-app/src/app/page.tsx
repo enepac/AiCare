@@ -3,7 +3,7 @@
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import Image from "next/image"; // ✅ Next.js optimized Image component
+import Image from "next/image";
 
 export default function LandingPage() {
   const router = useRouter();
@@ -15,18 +15,15 @@ export default function LandingPage() {
   });
   const [error, setError] = useState("");
 
-  // ✅ Handle input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  // ✅ Handle Login or Signup
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
     if (isSignup) {
-      // ✅ Handle Signup
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -40,7 +37,6 @@ export default function LandingPage() {
       const data = await res.json();
 
       if (res.ok) {
-        // ✅ Auto-login after signup
         const loginResult = await signIn("credentials", {
           email: formData.email,
           password: formData.password,
@@ -48,7 +44,7 @@ export default function LandingPage() {
         });
 
         if (!loginResult?.error) {
-          router.replace("/auth-check"); // ✅ Redirect to profile check
+          router.replace("/auth-check");
         } else {
           setError("Signup successful, but auto-login failed. Please log in manually.");
         }
@@ -56,7 +52,6 @@ export default function LandingPage() {
         setError(data.message || "Signup failed. Please try again.");
       }
     } else {
-      // ✅ Handle Login
       const result = await signIn("credentials", {
         email: formData.email,
         password: formData.password,
@@ -66,15 +61,14 @@ export default function LandingPage() {
       if (result?.error) {
         setError("Invalid email or password");
       } else {
-        router.replace("/auth-check"); // ✅ Redirect to profile check
+        router.replace("/auth-check");
       }
     }
   };
 
   return (
-    <div className="flex flex-col items-center min-h-screen bg-gray-100">
-      {/* 🚀 Hero Section */}
-      <div className="w-full bg-blue-600 text-white text-center py-10 px-6">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-r from-cyan-400 via-sky-500 to-blue-600 p-4">
+      <div className="text-center text-white py-8">
         <h1 className="text-4xl font-bold">Welcome to AiCare</h1>
         <p className="text-lg mt-2 max-w-2xl mx-auto">
           Your AI-powered healthcare assistant. Get insights, track symptoms, and manage your
@@ -82,27 +76,23 @@ export default function LandingPage() {
         </p>
       </div>
 
-      {/* Authentication Box */}
-      <div className="bg-white shadow-lg rounded-lg p-8 mt-2 w-full max-w-md">
-        {/* Logo Section */}
+      <div className="bg-white bg-opacity-90 shadow-xl rounded-xl p-8 w-full max-w-md backdrop-blur-md">
         <div className="text-center">
           <Image
             src="/logo.png"
             alt="AiCare Logo"
-            width={160} // ✅ Adjusted size for optimization
+            width={160}
             height={100}
-            priority // ✅ Ensures logo loads fast
+            priority
             className="mx-auto mb-3"
           />
-          <h2 className="text-lg font-semibold">Welcome to AiCare</h2>
+          <h2 className="text-lg font-semibold text-gray-800">Welcome to AiCare</h2>
           <p className="text-sm text-gray-600">
             {isSignup ? "Create an Account" : "Log in to continue"}
           </p>
         </div>
 
-        {/* Form Section */}
         <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
-          {/* Full Name Field - Visible for Signup Only */}
           {isSignup && (
             <input
               type="text"
@@ -110,75 +100,66 @@ export default function LandingPage() {
               placeholder="Full Name"
               value={formData.fullname}
               onChange={handleInputChange}
-              className="w-full rounded-lg border border-gray-300 p-3 focus:ring-2 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-300 p-3 focus:ring-2 focus:ring-sky-400"
               required
             />
           )}
 
-          {/* Email Input */}
           <input
             type="email"
             name="email"
             placeholder="Email Address"
             value={formData.email}
             onChange={handleInputChange}
-            className="w-full rounded-lg border border-gray-300 p-3 focus:ring-2 focus:ring-blue-500"
+            className="w-full rounded-lg border border-gray-300 p-3 focus:ring-2 focus:ring-sky-400"
             required
           />
 
-          {/* Password Input */}
           <input
             type="password"
             name="password"
             placeholder="Password"
             value={formData.password}
             onChange={handleInputChange}
-            className="w-full rounded-lg border border-gray-300 p-3 focus:ring-2 focus:ring-blue-500"
+            className="w-full rounded-lg border border-gray-300 p-3 focus:ring-2 focus:ring-sky-400"
             required
           />
 
-          {/* Error Message */}
           {error && <p className="text-red-500 text-sm text-center">{error}</p>}
 
-          {/* Login/Sign Up Button */}
           <button
             type="submit"
-            className="w-full bg-blue-600 text-white font-semibold py-3 rounded-lg hover:bg-blue-700"
+            className="w-full bg-sky-600 text-white font-semibold py-3 rounded-lg hover:bg-sky-700 transition duration-200"
           >
             {isSignup ? "Create Account" : "Log In"}
           </button>
         </form>
 
-        {/* Additional Actions */}
         <div className="mt-4 text-center space-y-2">
-          {/* Toggle Between Login & Signup */}
           <button
             type="button"
             onClick={() => setIsSignup(!isSignup)}
-            className="text-blue-600 hover:underline text-sm font-medium"
+            className="text-sky-600 hover:underline text-sm font-medium"
           >
             {isSignup ? "Already have an account? Log In" : "Don't have an account? Create Account"}
           </button>
 
-          {/* Forgot Password */}
           <div>
-            <a href="/auth/forgot-password" className="text-blue-600 text-sm hover:underline">
+            <a href="/auth/forgot-password" className="text-sky-600 text-sm hover:underline">
               Forgot Password?
             </a>
           </div>
 
-          {/* Google Sign-In Button */}
           <button
             type="button"
             onClick={() => signIn("google", { callbackUrl: "/auth-check" })}
-            className="mt-3 w-full flex items-center justify-center space-x-2 rounded-lg border border-gray-300 px-4 py-3 hover:bg-gray-100"
+            className="mt-3 w-full flex items-center justify-center space-x-2 rounded-lg border border-gray-300 px-4 py-3 hover:bg-gray-100 transition duration-200"
           >
             <Image src="/google-icon.png" alt="Google" width={20} height={20} className="w-5 h-5" />
             <span>Sign in with Google</span>
           </button>
         </div>
 
-        {/* Footer Section */}
         <div className="mt-4 text-center text-xs text-gray-500">
           <a href="#" className="hover:underline">
             Terms of Service
