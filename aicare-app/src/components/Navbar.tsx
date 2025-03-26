@@ -4,39 +4,63 @@ import Link from "next/link";
 import { signOut, useSession } from "next-auth/react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import type { UserProfile } from "@/types/UserProfile";
 
 export const Navbar = () => {
   const { data: session } = useSession();
   const router = useRouter();
+  const [profileComplete, setProfileComplete] = useState<boolean>(false);
+
+  useEffect(() => {
+    async function checkProfile() {
+      const res = await fetch("/api/profile");
+      if (res.ok) {
+        const data: UserProfile = await res.json();
+        setProfileComplete(data.isProfileComplete);
+      }
+    }
+
+    if (session) {
+      checkProfile();
+    }
+  }, [session]);
+
+  const handleProfileClick = () => {
+    if (profileComplete) {
+      router.push("/dashboard?section=profile");
+    } else {
+      router.push("/profile");
+    }
+  };
 
   const handleLogout = async () => {
-    await signOut({ redirect: false }); // Sign out user
-    router.push("/"); // Redirect to homepage
+    await signOut({ redirect: false });
+    router.push("/");
   };
 
   return (
     <nav className="bg-gray-800 text-white p-4">
       <div className="container mx-auto flex justify-between items-center">
-        {/* AiCare Logo */}
         <h1 className="text-2xl font-bold">AiCare</h1>
 
-        {/* Navigation Links */}
         <div className="flex space-x-6 items-center">
           <Link href="/" className="hover:text-gray-300">
             Home
           </Link>
-          <Link href="/profile" className="hover:text-gray-300">
+
+          <button onClick={handleProfileClick} className="hover:text-gray-300">
             Profile
-          </Link>
+          </button>
+
           <Link href="/assessment" className="hover:text-gray-300">
             Smart Assessment
           </Link>
 
-          {/* Show User Info & Logout Button ONLY if Logged In */}
           {session && session.user && (
             <div className="flex items-center space-x-3">
               <Image
-                src={session.user.image || "/assets/avatar.png"} // User avatar or default avatar
+                src={session.user.image || "/assets/avatar.png"}
                 alt="User Avatar"
                 width={36}
                 height={36}

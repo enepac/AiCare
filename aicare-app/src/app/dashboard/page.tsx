@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, ChangeEvent } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { DndProvider } from "react-dnd";
@@ -15,56 +15,105 @@ import MedicationReminders from "@/components/MedicationReminders";
 import ChatbotWidget from "@/components/ChatbotWidget";
 import DataVisualization from "@/components/DataVisualization";
 import MedicalRecords from "@/components/MedicalRecords";
+import ProfileProgressBar from "@/components/ProfileProgressBar";
 
-import type { UserProfile } from "@/types/UserProfile"; // <-- import your new interface
+import type { UserProfile } from "@/types/UserProfile";
 
 export default function Dashboard() {
   const { data: session, status } = useSession();
   const router = useRouter();
 
-  // 1) Which feature/tab is active
   const [activeFeature, setActiveFeature] = useState<string>("dashboard");
 
-  // 2) Store the user’s profile data in state
-  //    Initialize to null, meaning “not yet loaded”
   const [profileData, setProfileData] = useState<UserProfile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
+  const [profileCompletion, setProfileCompletion] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState("");
+
+  const fetchProfile = async () => {
+    try {
+      const res = await fetch("/api/profile");
+      if (res.ok) {
+        const data: UserProfile = await res.json();
+        setProfileData(data);
+
+        const fieldsToCheck = [
+          data.name,
+          data.age,
+          data.gender,
+          data.height,
+          data.weight,
+          data.bmi,
+          data.bloodType,
+          data.allergies,
+          data.medications,
+          data.activityLevel
+        ];
+
+        const totalFields = fieldsToCheck.length;
+        const completedFields = fieldsToCheck.filter((field) => field && field !== "").length;
+        const percentage = Math.round((completedFields / totalFields) * 100);
+
+        setProfileCompletion(percentage);
+      } else {
+        console.error("❌ Failed to fetch user profile");
+      }
+    } catch (error) {
+      console.error("❌ Error fetching user profile:", error);
+    } finally {
+      setLoadingProfile(false);
+    }
+  };
 
   useEffect(() => {
-    if (status === "loading") return; // still checking session
+    if (status === "loading") return;
 
     if (!session) {
-      // No session: redirect to homepage
       router.push("/");
       return;
-    }
-
-    // Session is valid, fetch the user’s profile
-    async function fetchProfile() {
-      try {
-        const res = await fetch("/api/profile");
-        if (res.ok) {
-          const data: UserProfile = await res.json();
-          setProfileData(data);
-        } else {
-          console.error("❌ Failed to fetch user profile");
-        }
-      } catch (error) {
-        console.error("❌ Error fetching user profile:", error);
-      } finally {
-        setLoadingProfile(false);
-      }
     }
 
     fetchProfile();
   }, [session, status, router]);
 
-  // If still loading session or fetching profile, show a spinner or message
+  const handleProfileChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setProfileData((prev) => prev && { ...prev, [name]: value });
+  };
+
+  const handlePregnantChange = (value: boolean) => {
+    setProfileData((prev) => prev && { ...prev, isPregnant: value });
+  };
+
+  const saveProfile = async () => {
+    if (!profileData) return;
+    setSaving(true);
+    setSaveMessage("");
+
+    try {
+      const res = await fetch("/api/profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(profileData)
+      });
+
+      if (!res.ok) throw new Error("Save failed");
+
+      setSaveMessage("Profile successfully saved!");
+      await fetchProfile();
+    } catch (error) {
+      console.error("❌ Error saving profile:", error);
+      setSaveMessage("Error saving profile.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (status === "loading" || loadingProfile) {
     return <p>Loading your dashboard...</p>;
   }
 
-  // If we have no profile data after loading, show an error or fallback
   if (!profileData) {
     return <p>Couldn’t load your profile. Please try again later.</p>;
   }
@@ -79,23 +128,43 @@ export default function Dashboard() {
 
           {activeFeature === "dashboard" && (
             <>
+              <div className="mb-4">
+                <h2 className="text-xl font-semibold mb-2">
+                  Profile Completion: {profileCompletion}%
+                </h2>
+                <ProfileProgressBar completionPercentage={profileCompletion} />
+                {profileCompletion < 100 && (
+                  <div className="mt-4 p-4 bg-yellow-100 border border-yellow-300 text-yellow-800 rounded-md">
+                    ⚠️ <strong>Complete your profile</strong> to ensure the AI can provide the most
+                    accurate and personalized responses.
+                    <button
+                      className="ml-2 underline text-yellow-700 hover:text-yellow-900"
+                      onClick={() => router.push("/profile")}
+                    >
+                      Complete Now
+                    </button>
+                  </div>
+                )}
+              </div>
+
               <PatientProfile
-                name={profileData.name}
-                age={profileData.age}
-                gender={profileData.gender}
-                height={profileData.height}
-                weight={profileData.weight}
-                bmi={profileData.bmi}
-                bloodType={profileData.bloodType}
+                {...profileData}
                 pregnant={profileData.isPregnant}
-                allergies={profileData.allergies}
-                medications={profileData.medications}
-                familyHistory={profileData.familyHistory}
-                activityLevel={profileData.activityLevel}
-                diet={profileData.diet}
-                handleChange={() => {}}
-                handlePregnantChange={() => {}}
+                handleChange={handleProfileChange}
+                handlePregnantChange={handlePregnantChange}
+                editable={true}
               />
+
+              <button
+                onClick={saveProfile}
+                disabled={saving}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400"
+              >
+                {saving ? "Saving..." : "Save Profile"}
+              </button>
+
+              {saveMessage && <p className="text-sm mt-2 text-green-600">{saveMessage}</p>}
+
               <HealthSummary />
               <AppointmentList />
               <MedicationReminders />

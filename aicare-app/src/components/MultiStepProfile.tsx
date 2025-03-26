@@ -2,6 +2,7 @@
 
 import { useState, ChangeEvent, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 
 const steps = ["Basic Info", "Physical Attributes", "Medical History", "Lifestyle"];
 
@@ -231,6 +232,15 @@ export default function MultiStepProfile() {
               type="text"
               name="allergies"
               value={profile.allergies}
+              onChange={handleChange}
+              className="w-full p-2 mb-3 border"
+            />
+
+            <label className="block text-sm font-medium text-gray-700">Medications</label>
+            <input
+              type="text"
+              name="medications"
+              value={profile.medications}
               onChange={handleChange}
               className="w-full p-2 mb-3 border"
             />

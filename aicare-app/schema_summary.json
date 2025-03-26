@@ -13,5 +13,22 @@
   "follow_up_instructions",
   "additional_tests",
   "plan_follow_up",
-  "plan_follow_up_procedures"
+  "plan_follow_up_procedures",
+  "gender",
+  "patient_id",
+  "blood_type",
+  "height_cm",
+  "weight_kg",
+  "bmi",
+  "symptoms",
+  "prescribed_medication",
+  "blood_pressure_mmHg",
+  "cholesterol_mg_per_dL",
+  "blood_sugar_mg_per_dL_fasting",
+  "dietary_advice",
+  "physical_activity_advice",
+  "next_follow_up_months",
+  "cholesterol_mg_dL",
+  "blood_sugar_mg_dL_fasting",
+  "follow_up_months"
 ]

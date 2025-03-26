@@ -1,6 +1,5 @@
 "use client";
-import { useState } from "react";
-import { ChangeEvent } from "react"; // ✅ Import ChangeEvent from React
+import { useState, ChangeEvent } from "react";
 
 interface PatientProfileProps {
   name: string;
@@ -10,14 +9,15 @@ interface PatientProfileProps {
   weight: number | null;
   bmi: number | null;
   bloodType: string;
-  pregnant: boolean; // ✅ Ensure correct prop name
+  pregnant: boolean;
   allergies: string;
   medications: string;
   familyHistory: string;
   activityLevel: string;
   diet: string;
   handleChange: (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void;
-  handlePregnantChange: (value: boolean) => void; // ✅ This must be passed from Dashboard
+  handlePregnantChange: (value: boolean) => void;
+  editable?: boolean;
 }
 
 const PatientProfile: React.FC<PatientProfileProps> = ({
@@ -35,7 +35,8 @@ const PatientProfile: React.FC<PatientProfileProps> = ({
   activityLevel,
   diet,
   handleChange,
-  handlePregnantChange // ✅ Accept new handler
+  handlePregnantChange,
+  editable = false
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -51,12 +52,12 @@ const PatientProfile: React.FC<PatientProfileProps> = ({
         </button>
       </div>
 
-      {/* Essential Details (Always Visible) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
         <div>
           <label className="block text-sm font-medium text-gray-700">Name</label>
           <input
             type="text"
+            name="name"
             value={name}
             disabled
             className="w-full p-2 border rounded-md bg-gray-100"
@@ -69,8 +70,9 @@ const PatientProfile: React.FC<PatientProfileProps> = ({
             type="number"
             name="age"
             value={age}
+            disabled={!editable}
             onChange={handleChange}
-            className="w-full p-2 border rounded-md"
+            className={`w-full p-2 border rounded-md ${!editable ? "bg-gray-100" : ""}`}
           />
         </div>
 
@@ -79,8 +81,9 @@ const PatientProfile: React.FC<PatientProfileProps> = ({
           <select
             name="gender"
             value={gender}
+            disabled={!editable}
             onChange={handleChange}
-            className="w-full p-2 border rounded-md"
+            className={`w-full p-2 border rounded-md ${!editable ? "bg-gray-100" : ""}`}
           >
             <option value="">Select Gender</option>
             <option value="Male">Male</option>
@@ -94,8 +97,9 @@ const PatientProfile: React.FC<PatientProfileProps> = ({
           <select
             name="bloodType"
             value={bloodType}
+            disabled={!editable}
             onChange={handleChange}
-            className="w-full p-2 border rounded-md"
+            className={`w-full p-2 border rounded-md ${!editable ? "bg-gray-100" : ""}`}
           >
             <option value="">Select Blood Type</option>
             <option value="A+">A+</option>
@@ -110,7 +114,6 @@ const PatientProfile: React.FC<PatientProfileProps> = ({
         </div>
       </div>
 
-      {/* Expanded Details (Hidden Until Expanded) */}
       {isExpanded && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
           <div>
@@ -118,9 +121,10 @@ const PatientProfile: React.FC<PatientProfileProps> = ({
             <input
               type="number"
               name="height"
-              value={height || ""}
+              value={height ?? ""}
+              disabled={!editable}
               onChange={handleChange}
-              className="w-full p-2 border rounded-md"
+              className={`w-full p-2 border rounded-md ${!editable ? "bg-gray-100" : ""}`}
             />
           </div>
 
@@ -129,9 +133,10 @@ const PatientProfile: React.FC<PatientProfileProps> = ({
             <input
               type="number"
               name="weight"
-              value={weight || ""}
+              value={weight ?? ""}
+              disabled={!editable}
               onChange={handleChange}
-              className="w-full p-2 border rounded-md"
+              className={`w-full p-2 border rounded-md ${!editable ? "bg-gray-100" : ""}`}
             />
           </div>
 
@@ -140,22 +145,20 @@ const PatientProfile: React.FC<PatientProfileProps> = ({
             <input
               type="number"
               name="bmi"
-              value={bmi || ""}
+              value={bmi ?? ""}
               disabled
               className="w-full p-2 border rounded-md bg-gray-100"
             />
           </div>
-
-          {/* ✅ Show Pregnant Field Only for Female */}
-          {/* ✅ Show Pregnant Field Only for Female */}
           {gender === "Female" && (
             <div>
               <label className="block text-sm font-medium text-gray-700">Pregnant</label>
               <select
                 name="isPregnant"
                 value={pregnant ? "true" : "false"}
-                onChange={(e) => handlePregnantChange(e.target.value === "true")} // ✅ Pass boolean directly
-                className="w-full p-2 border rounded-md"
+                disabled={!editable}
+                onChange={(e) => handlePregnantChange(e.target.value === "true")}
+                className={`w-full p-2 border rounded-md ${!editable ? "bg-gray-100" : ""}`}
               >
                 <option value="false">No</option>
                 <option value="true">Yes</option>
@@ -169,8 +172,9 @@ const PatientProfile: React.FC<PatientProfileProps> = ({
               type="text"
               name="allergies"
               value={allergies}
+              disabled={!editable}
               onChange={handleChange}
-              className="w-full p-2 border rounded-md"
+              className={`w-full p-2 border rounded-md ${!editable ? "bg-gray-100" : ""}`}
             />
           </div>
 
@@ -180,8 +184,9 @@ const PatientProfile: React.FC<PatientProfileProps> = ({
               type="text"
               name="medications"
               value={medications}
+              disabled={!editable}
               onChange={handleChange}
-              className="w-full p-2 border rounded-md"
+              className={`w-full p-2 border rounded-md ${!editable ? "bg-gray-100" : ""}`}
             />
           </div>
 
@@ -191,8 +196,9 @@ const PatientProfile: React.FC<PatientProfileProps> = ({
               type="text"
               name="familyHistory"
               value={familyHistory}
+              disabled={!editable}
               onChange={handleChange}
-              className="w-full p-2 border rounded-md"
+              className={`w-full p-2 border rounded-md ${!editable ? "bg-gray-100" : ""}`}
             />
           </div>
 
@@ -202,8 +208,9 @@ const PatientProfile: React.FC<PatientProfileProps> = ({
               type="text"
               name="activityLevel"
               value={activityLevel}
+              disabled={!editable}
               onChange={handleChange}
-              className="w-full p-2 border rounded-md"
+              className={`w-full p-2 border rounded-md ${!editable ? "bg-gray-100" : ""}`}
             />
           </div>
 
@@ -213,8 +220,9 @@ const PatientProfile: React.FC<PatientProfileProps> = ({
               type="text"
               name="diet"
               value={diet}
+              disabled={!editable}
               onChange={handleChange}
-              className="w-full p-2 border rounded-md"
+              className={`w-full p-2 border rounded-md ${!editable ? "bg-gray-100" : ""}`}
             />
           </div>
         </div>

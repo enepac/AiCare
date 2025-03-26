@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../../lib/authOptions";
 import User from "@/models/user";
@@ -20,7 +20,6 @@ export async function GET() {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // ✅ Updated profile completion check (includes height, weight, BMI)
     const requiredFields = [
       "age",
       "gender",
@@ -51,10 +50,30 @@ export async function GET() {
       bmi: user.bmi || null,
       bloodType: user.bloodType || "",
       isPregnant: user.isPregnant ?? false,
-      isProfileComplete // ✅ Correct profile completion status
+      isProfileComplete
     });
   } catch (error) {
     console.error("❌ Error fetching profile:", error);
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
+  }
+}
+
+export async function POST(req: NextRequest) {
+  await dbConnect();
+  const session = await getServerSession(authOptions);
+
+  if (!session || !session.user?.email) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const profileUpdates = await req.json();
+
+    await User.updateOne({ email: session.user.email }, { $set: profileUpdates }, { upsert: true });
+
+    return NextResponse.json({ success: true }, { status: 200 });
+  } catch (error) {
+    console.error("❌ Error saving profile:", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }
