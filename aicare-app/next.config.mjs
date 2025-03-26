@@ -16,10 +16,10 @@ const nextConfig = {
     NEXT_PUBLIC_PORT: "4000"
   },
   serverRuntimeConfig: {
-    port: process.env.PORT || 4000 // ✅ Ensures flexibility for different environments
+    port: process.env.PORT || 4000
   },
   publicRuntimeConfig: {
-    port: process.env.NEXT_PUBLIC_PORT || 4000 // ✅ Ensures accessibility for client-side use
+    port: process.env.NEXT_PUBLIC_PORT || 4000
   }
 };
 

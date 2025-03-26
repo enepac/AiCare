@@ -32,7 +32,7 @@ aicare-app
     ├── filtered_structure.txt
     ├── generate_structure.sh
     ├── .gitignore
-    ├── next.config.ts
+    ├── next.config.mjs
     ├── next-env.d.ts
     ├── package.json
     ├── pages
@@ -138,13 +138,16 @@ aicare-app
     ├── README.md
     ├── schema_summary.json
     ├── scripts
+    │   ├── auditChatbotSetup.ts
     │   ├── build
     │   │   └── generate_code_snapshot.js
     │   ├── check-records.ts
     │   ├── generate_code_snapshot.ts
     │   ├── generate-schema.ts
     │   └── ocr.ts
+    ├── server.ts
     ├── smtp-test.js
+    ├── socket.ts
     ├── source_code.md
     ├── src
     │   ├── app
@@ -167,6 +170,15 @@ aicare-app
     │   │   │   │   │   └── route-custom.ts
     │   │   │   │   └── signup
     │   │   │   │       └── route.ts
+    │   │   │   ├── chatbot
+    │   │   │   │   ├── new-thread
+    │   │   │   │   │   └── route.ts
+    │   │   │   │   ├── route.ts
+    │   │   │   │   └── threads
+    │   │   │   │       ├── route.ts
+    │   │   │   │       └── [threadId]
+    │   │   │   │           ├── messages
+    │   │   │   │           └── route.ts
     │   │   │   ├── cron
     │   │   │   │   └── route.ts
     │   │   │   ├── dashboard
@@ -216,6 +228,10 @@ aicare-app
     │   │   │       └── page.tsx
     │   │   ├── auth-check
     │   │   │   └── page.tsx
+    │   │   ├── chatbot
+    │   │   │   ├── page.tsx
+    │   │   │   └── [threadId]
+    │   │   │       └── page.tsx
     │   │   ├── dashboard
     │   │   │   └── page.tsx
     │   │   ├── favicon.ico
@@ -244,6 +260,7 @@ aicare-app
     │   │   ├── Navbar.tsx
     │   │   ├── PasswordRequirements.tsx
     │   │   ├── PatientProfile.tsx
+    │   │   ├── ProfileProgressBar.tsx
     │   │   ├── Providers.tsx
     │   │   └── Sidebar.tsx
     │   ├── lib
@@ -260,6 +277,8 @@ aicare-app
     │   │   │   └── saveParsedRecord.ts
     │   │   ├── fileParsers
     │   │   │   ├── parseDocx.ts
+    │   │   │   ├── parseHtmlCheerio.ts
+    │   │   │   ├── parseHtmlDocling.ts
     │   │   │   ├── parseRtfDocling.ts
     │   │   │   └── parseRtf.ts
     │   │   ├── mongodb
@@ -272,6 +291,7 @@ aicare-app
     │   │   └── auth.ts
     │   ├── middleware.ts
     │   ├── models
+    │   │   ├── conversation.ts
     │   │   ├── MedicalRecord.ts
     │   │   └── user.ts
     │   ├── styles
@@ -44091,9 +44111,9 @@ import { uploadFileToS3 } from "@/lib/aws/s3Uploader";
 import { parseDocumentWithTextract } from "@/lib/aws/textractParser";
 import { parseMedicalTextWithGPT } from "@/lib/ai/gptMedicalParser";
 import { generateSchemaSummary } from "@/lib/mongodb/schemaSummary";
-import { parseDocx } from "@/lib/fileParsers/parseDocx"; // ✅ explicit DOCX parser import
-import { parseRtfWithDocling } from "@/lib/fileParsers/parseRtfDocling"; // ✅ explicit Docling parser import
-import { convert } from "html-to-text";
+import { parseDocx } from "@/lib/fileParsers/parseDocx";
+import { parseRtfWithDocling } from "@/lib/fileParsers/parseRtfDocling";
+import { parseHtmlCheerio } from "@/lib/fileParsers/parseHtmlCheerio";
 
 const ALLOWED_FILE_TYPES = [
   "application/pdf",
@@ -44147,7 +44167,7 @@ export async function POST(req: NextRequest) {
     }
 
     const fileType = file.type;
-    console.log("🔍 Explicit File MIME Type:", fileType); // explicitly log the MIME type
+    console.log("🔍 Explicit File MIME Type:", fileType);
 
     if (!ALLOWED_FILE_TYPES.includes(fileType)) {
       return NextResponse.json({ error: "Invalid file type uploaded" }, { status: 400 });
@@ -44165,8 +44185,6 @@ export async function POST(req: NextRequest) {
 
     let extractedText = "";
 
-    // Explicit conditional parsing based on File Type
-    // Explicit parsing condition:
     if (["application/pdf", "image/jpeg", "image/png"].includes(fileType)) {
       const textractResult = await parseDocumentWithTextract(
         "aicare-medical-records-uploads",
@@ -44182,20 +44200,17 @@ export async function POST(req: NextRequest) {
     } else if (["text/plain", "text/csv"].includes(fileType)) {
       extractedText = fileBuffer.toString("utf-8");
     } else if (fileType === "text/html") {
-      // ✅ explicitly handle HTML parsing
       const htmlContent = fileBuffer.toString("utf-8");
-      extractedText = convert(htmlContent, { wordwrap: false });
+      extractedText = await parseHtmlCheerio(htmlContent);
     } else {
       return NextResponse.json({ error: "Unsupported file type for parsing" }, { status: 400 });
     }
 
     console.log("✅ Extracted Text:", extractedText);
 
-    // GPT-powered structured parsing
     const structuredData = await parseMedicalTextWithGPT(extractedText);
     console.log("✅ GPT Structured Data:", structuredData);
 
-    // Save dynamically structured data directly to MongoDB
     const newRecord = new MedicalRecord({
       userEmail,
       fileName,
@@ -44208,7 +44223,6 @@ export async function POST(req: NextRequest) {
     const savedRecord = await newRecord.save();
     console.log("✅ Medical record (dynamic structured fields) saved:", savedRecord);
 
-    // Regenerate schema summary after every upload
     await generateSchemaSummary();
     console.log("✅ Schema summary updated after upload.");
 
@@ -44393,7 +44407,7 @@ export async function GET() {
 
 ### /workspaces/aicare/aicare-app/src/app/api/profile/route.ts
 ```
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../../lib/authOptions";
 import User from "@/models/user";
@@ -44415,7 +44429,6 @@ export async function GET() {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // ✅ Updated profile completion check (includes height, weight, BMI)
     const requiredFields = [
       "age",
       "gender",
@@ -44446,10 +44459,30 @@ export async function GET() {
       bmi: user.bmi || null,
       bloodType: user.bloodType || "",
       isPregnant: user.isPregnant ?? false,
-      isProfileComplete // ✅ Correct profile completion status
+      isProfileComplete
     });
   } catch (error) {
     console.error("❌ Error fetching profile:", error);
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
+  }
+}
+
+export async function POST(req: NextRequest) {
+  await dbConnect();
+  const session = await getServerSession(authOptions);
+
+  if (!session || !session.user?.email) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const profileUpdates = await req.json();
+
+    await User.updateOne({ email: session.user.email }, { $set: profileUpdates }, { upsert: true });
+
+    return NextResponse.json({ success: true }, { status: 200 });
+  } catch (error) {
+    console.error("❌ Error saving profile:", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }
@@ -44736,25 +44769,42 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
 export default function AuthCheckPage() {
-  const { data: session, status } = useSession();
+  const { data: session, status, update } = useSession();
   const router = useRouter();
 
   useEffect(() => {
-    if (status === "loading") return;
+    async function verifyProfile() {
+      if (status === "loading") return;
 
-    // If no session, redirect to homepage
-    if (!session || !session.user) {
-      router.replace("/");
-      return;
+      if (!session || !session.user) {
+        router.replace("/");
+        return;
+      }
+
+      // Explicit API call to check profile completion status
+      const res = await fetch("/api/profile/progress");
+      if (res.ok) {
+        const { completionPercentage } = await res.json();
+        const isProfileComplete = completionPercentage === 100;
+
+        // Update session immediately if discrepancy found
+        if (session.user.isProfileComplete !== isProfileComplete) {
+          await update({ isProfileComplete });
+        }
+
+        if (isProfileComplete) {
+          router.replace("/dashboard");
+        } else {
+          router.replace("/profile");
+        }
+      } else {
+        console.error("Failed to verify profile completion from API.");
+        router.replace("/profile");
+      }
     }
 
-    // Now TypeScript knows session.user is defined
-    if (session.user.isProfileComplete) {
-      router.replace("/dashboard");
-    } else {
-      router.replace("/profile");
-    }
-  }, [session, status, router]);
+    verifyProfile();
+  }, [session, status, router, update]);
 
   return <p>Loading...</p>;
 }
@@ -45170,7 +45220,7 @@ export default function SignupPage() {
 ```
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, ChangeEvent } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { DndProvider } from "react-dnd";
@@ -45185,56 +45235,105 @@ import MedicationReminders from "@/components/MedicationReminders";
 import ChatbotWidget from "@/components/ChatbotWidget";
 import DataVisualization from "@/components/DataVisualization";
 import MedicalRecords from "@/components/MedicalRecords";
+import ProfileProgressBar from "@/components/ProfileProgressBar";
 
-import type { UserProfile } from "@/types/UserProfile"; // <-- import your new interface
+import type { UserProfile } from "@/types/UserProfile";
 
 export default function Dashboard() {
   const { data: session, status } = useSession();
   const router = useRouter();
 
-  // 1) Which feature/tab is active
   const [activeFeature, setActiveFeature] = useState<string>("dashboard");
 
-  // 2) Store the user’s profile data in state
-  //    Initialize to null, meaning “not yet loaded”
   const [profileData, setProfileData] = useState<UserProfile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
+  const [profileCompletion, setProfileCompletion] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState("");
+
+  const fetchProfile = async () => {
+    try {
+      const res = await fetch("/api/profile");
+      if (res.ok) {
+        const data: UserProfile = await res.json();
+        setProfileData(data);
+
+        const fieldsToCheck = [
+          data.name,
+          data.age,
+          data.gender,
+          data.height,
+          data.weight,
+          data.bmi,
+          data.bloodType,
+          data.allergies,
+          data.medications,
+          data.activityLevel
+        ];
+
+        const totalFields = fieldsToCheck.length;
+        const completedFields = fieldsToCheck.filter((field) => field && field !== "").length;
+        const percentage = Math.round((completedFields / totalFields) * 100);
+
+        setProfileCompletion(percentage);
+      } else {
+        console.error("❌ Failed to fetch user profile");
+      }
+    } catch (error) {
+      console.error("❌ Error fetching user profile:", error);
+    } finally {
+      setLoadingProfile(false);
+    }
+  };
 
   useEffect(() => {
-    if (status === "loading") return; // still checking session
+    if (status === "loading") return;
 
     if (!session) {
-      // No session: redirect to homepage
       router.push("/");
       return;
-    }
-
-    // Session is valid, fetch the user’s profile
-    async function fetchProfile() {
-      try {
-        const res = await fetch("/api/profile");
-        if (res.ok) {
-          const data: UserProfile = await res.json();
-          setProfileData(data);
-        } else {
-          console.error("❌ Failed to fetch user profile");
-        }
-      } catch (error) {
-        console.error("❌ Error fetching user profile:", error);
-      } finally {
-        setLoadingProfile(false);
-      }
     }
 
     fetchProfile();
   }, [session, status, router]);
 
-  // If still loading session or fetching profile, show a spinner or message
+  const handleProfileChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setProfileData((prev) => prev && { ...prev, [name]: value });
+  };
+
+  const handlePregnantChange = (value: boolean) => {
+    setProfileData((prev) => prev && { ...prev, isPregnant: value });
+  };
+
+  const saveProfile = async () => {
+    if (!profileData) return;
+    setSaving(true);
+    setSaveMessage("");
+
+    try {
+      const res = await fetch("/api/profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(profileData)
+      });
+
+      if (!res.ok) throw new Error("Save failed");
+
+      setSaveMessage("Profile successfully saved!");
+      await fetchProfile();
+    } catch (error) {
+      console.error("❌ Error saving profile:", error);
+      setSaveMessage("Error saving profile.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (status === "loading" || loadingProfile) {
     return <p>Loading your dashboard...</p>;
   }
 
-  // If we have no profile data after loading, show an error or fallback
   if (!profileData) {
     return <p>Couldn’t load your profile. Please try again later.</p>;
   }
@@ -45249,23 +45348,43 @@ export default function Dashboard() {
 
           {activeFeature === "dashboard" && (
             <>
+              <div className="mb-4">
+                <h2 className="text-xl font-semibold mb-2">
+                  Profile Completion: {profileCompletion}%
+                </h2>
+                <ProfileProgressBar completionPercentage={profileCompletion} />
+                {profileCompletion < 100 && (
+                  <div className="mt-4 p-4 bg-yellow-100 border border-yellow-300 text-yellow-800 rounded-md">
+                    ⚠️ <strong>Complete your profile</strong> to ensure the AI can provide the most
+                    accurate and personalized responses.
+                    <button
+                      className="ml-2 underline text-yellow-700 hover:text-yellow-900"
+                      onClick={() => router.push("/profile")}
+                    >
+                      Complete Now
+                    </button>
+                  </div>
+                )}
+              </div>
+
               <PatientProfile
-                name={profileData.name}
-                age={profileData.age}
-                gender={profileData.gender}
-                height={profileData.height}
-                weight={profileData.weight}
-                bmi={profileData.bmi}
-                bloodType={profileData.bloodType}
+                {...profileData}
                 pregnant={profileData.isPregnant}
-                allergies={profileData.allergies}
-                medications={profileData.medications}
-                familyHistory={profileData.familyHistory}
-                activityLevel={profileData.activityLevel}
-                diet={profileData.diet}
-                handleChange={() => {}}
-                handlePregnantChange={() => {}}
+                handleChange={handleProfileChange}
+                handlePregnantChange={handlePregnantChange}
+                editable={true}
               />
+
+              <button
+                onClick={saveProfile}
+                disabled={saving}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400"
+              >
+                {saving ? "Saving..." : "Save Profile"}
+              </button>
+
+              {saveMessage && <p className="text-sm mt-2 text-green-600">{saveMessage}</p>}
+
               <HealthSummary />
               <AppointmentList />
               <MedicationReminders />
@@ -45354,7 +45473,7 @@ export const metadata = {
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import Image from "next/image"; // ✅ Next.js optimized Image component
+import Image from "next/image";
 
 export default function LandingPage() {
   const router = useRouter();
@@ -45366,18 +45485,15 @@ export default function LandingPage() {
   });
   const [error, setError] = useState("");
 
-  // ✅ Handle input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  // ✅ Handle Login or Signup
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
     if (isSignup) {
-      // ✅ Handle Signup
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -45391,7 +45507,6 @@ export default function LandingPage() {
       const data = await res.json();
 
       if (res.ok) {
-        // ✅ Auto-login after signup
         const loginResult = await signIn("credentials", {
           email: formData.email,
           password: formData.password,
@@ -45399,7 +45514,7 @@ export default function LandingPage() {
         });
 
         if (!loginResult?.error) {
-          router.replace("/auth-check"); // ✅ Redirect to profile check
+          router.replace("/auth-check");
         } else {
           setError("Signup successful, but auto-login failed. Please log in manually.");
         }
@@ -45407,7 +45522,6 @@ export default function LandingPage() {
         setError(data.message || "Signup failed. Please try again.");
       }
     } else {
-      // ✅ Handle Login
       const result = await signIn("credentials", {
         email: formData.email,
         password: formData.password,
@@ -45417,15 +45531,14 @@ export default function LandingPage() {
       if (result?.error) {
         setError("Invalid email or password");
       } else {
-        router.replace("/auth-check"); // ✅ Redirect to profile check
+        router.replace("/auth-check");
       }
     }
   };
 
   return (
-    <div className="flex flex-col items-center min-h-screen bg-gray-100">
-      {/* 🚀 Hero Section */}
-      <div className="w-full bg-blue-600 text-white text-center py-10 px-6">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-r from-cyan-400 via-sky-500 to-blue-600 p-4">
+      <div className="text-center text-white py-8">
         <h1 className="text-4xl font-bold">Welcome to AiCare</h1>
         <p className="text-lg mt-2 max-w-2xl mx-auto">
           Your AI-powered healthcare assistant. Get insights, track symptoms, and manage your
@@ -45433,27 +45546,23 @@ export default function LandingPage() {
         </p>
       </div>
 
-      {/* Authentication Box */}
-      <div className="bg-white shadow-lg rounded-lg p-8 mt-2 w-full max-w-md">
-        {/* Logo Section */}
+      <div className="bg-white bg-opacity-90 shadow-xl rounded-xl p-8 w-full max-w-md backdrop-blur-md">
         <div className="text-center">
           <Image
             src="/logo.png"
             alt="AiCare Logo"
-            width={160} // ✅ Adjusted size for optimization
+            width={160}
             height={100}
-            priority // ✅ Ensures logo loads fast
+            priority
             className="mx-auto mb-3"
           />
-          <h2 className="text-lg font-semibold">Welcome to AiCare</h2>
+          <h2 className="text-lg font-semibold text-gray-800">Welcome to AiCare</h2>
           <p className="text-sm text-gray-600">
             {isSignup ? "Create an Account" : "Log in to continue"}
           </p>
         </div>
 
-        {/* Form Section */}
         <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
-          {/* Full Name Field - Visible for Signup Only */}
           {isSignup && (
             <input
               type="text"
@@ -45461,75 +45570,66 @@ export default function LandingPage() {
               placeholder="Full Name"
               value={formData.fullname}
               onChange={handleInputChange}
-              className="w-full rounded-lg border border-gray-300 p-3 focus:ring-2 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-300 p-3 focus:ring-2 focus:ring-sky-400"
               required
             />
           )}
 
-          {/* Email Input */}
           <input
             type="email"
             name="email"
             placeholder="Email Address"
             value={formData.email}
             onChange={handleInputChange}
-            className="w-full rounded-lg border border-gray-300 p-3 focus:ring-2 focus:ring-blue-500"
+            className="w-full rounded-lg border border-gray-300 p-3 focus:ring-2 focus:ring-sky-400"
             required
           />
 
-          {/* Password Input */}
           <input
             type="password"
             name="password"
             placeholder="Password"
             value={formData.password}
             onChange={handleInputChange}
-            className="w-full rounded-lg border border-gray-300 p-3 focus:ring-2 focus:ring-blue-500"
+            className="w-full rounded-lg border border-gray-300 p-3 focus:ring-2 focus:ring-sky-400"
             required
           />
 
-          {/* Error Message */}
           {error && <p className="text-red-500 text-sm text-center">{error}</p>}
 
-          {/* Login/Sign Up Button */}
           <button
             type="submit"
-            className="w-full bg-blue-600 text-white font-semibold py-3 rounded-lg hover:bg-blue-700"
+            className="w-full bg-sky-600 text-white font-semibold py-3 rounded-lg hover:bg-sky-700 transition duration-200"
           >
             {isSignup ? "Create Account" : "Log In"}
           </button>
         </form>
 
-        {/* Additional Actions */}
         <div className="mt-4 text-center space-y-2">
-          {/* Toggle Between Login & Signup */}
           <button
             type="button"
             onClick={() => setIsSignup(!isSignup)}
-            className="text-blue-600 hover:underline text-sm font-medium"
+            className="text-sky-600 hover:underline text-sm font-medium"
           >
             {isSignup ? "Already have an account? Log In" : "Don't have an account? Create Account"}
           </button>
 
-          {/* Forgot Password */}
           <div>
-            <a href="/auth/forgot-password" className="text-blue-600 text-sm hover:underline">
+            <a href="/auth/forgot-password" className="text-sky-600 text-sm hover:underline">
               Forgot Password?
             </a>
           </div>
 
-          {/* Google Sign-In Button */}
           <button
             type="button"
             onClick={() => signIn("google", { callbackUrl: "/auth-check" })}
-            className="mt-3 w-full flex items-center justify-center space-x-2 rounded-lg border border-gray-300 px-4 py-3 hover:bg-gray-100"
+            className="mt-3 w-full flex items-center justify-center space-x-2 rounded-lg border border-gray-300 px-4 py-3 hover:bg-gray-100 transition duration-200"
           >
             <Image src="/google-icon.png" alt="Google" width={20} height={20} className="w-5 h-5" />
             <span>Sign in with Google</span>
           </button>
         </div>
 
-        {/* Footer Section */}
         <div className="mt-4 text-center text-xs text-gray-500">
           <a href="#" className="hover:underline">
             Terms of Service
@@ -46385,6 +46485,7 @@ export default function MedicationReminders() {
 
 import { useState, ChangeEvent, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 
 const steps = ["Basic Info", "Physical Attributes", "Medical History", "Lifestyle"];
 
@@ -46426,35 +46527,15 @@ export default function MultiStepProfile() {
 
   useEffect(() => {
     async function fetchProfileData() {
-      try {
-        const res = await fetch("/api/profile");
-        if (res.ok) {
-          const data = await res.json();
-          setProfile({
-            name: data.name || "",
-            age: data.age ?? 0,
-            gender: data.gender || "",
-            height: data.height ?? null,
-            weight: data.weight ?? null,
-            bmi: data.bmi ?? null,
-            bloodType: data.bloodType || "",
-            isPregnant: data.isPregnant ?? false,
-            allergies: data.allergies || "",
-            medications: data.medications || "",
-            familyHistory: data.familyHistory || "",
-            activityLevel: data.activityLevel || "",
-            diet: data.diet || ""
-          });
-        }
-      } catch (error) {
-        console.error("❌ Error fetching profile:", error);
+      const res = await fetch("/api/profile");
+      if (res.ok) {
+        const data = await res.json();
+        setProfile(data);
       }
     }
-
     fetchProfileData();
   }, []);
 
-  // ✅ Handle Input Changes
   const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     let updatedValue: string | number | boolean | null = value;
@@ -46468,7 +46549,6 @@ export default function MultiStepProfile() {
     setProfile((prev) => {
       const updatedProfile = { ...prev, [name]: updatedValue };
 
-      // ✅ Auto-calculate BMI when height or weight changes
       if (name === "height" || name === "weight") {
         const { height, weight } = updatedProfile;
         if (height && weight) {
@@ -46478,17 +46558,14 @@ export default function MultiStepProfile() {
           updatedProfile.bmi = null;
         }
       }
-
       return updatedProfile;
     });
   };
 
-  // ✅ Step Navigation Handlers
   const handleNext = () => setStep((prev) => Math.min(prev + 1, steps.length - 1));
   const handlePrev = () => setStep((prev) => Math.max(prev - 1, 0));
   const handleSkip = () => router.replace("/dashboard");
 
-  // ✅ Save Profile and Go to Dashboard
   const handleSaveProfile = async () => {
     setSaving(true);
     try {
@@ -46497,7 +46574,6 @@ export default function MultiStepProfile() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(profile)
       });
-
       router.replace("/dashboard");
     } catch (error) {
       console.error("❌ Error updating profile:", error);
@@ -46507,181 +46583,228 @@ export default function MultiStepProfile() {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100">
-      <h1 className="text-3xl font-bold">Profile Setup</h1>
-      <p className="text-gray-600 mb-4">
-        Step {step + 1} of {steps.length}: {steps[step]}
-      </p>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-r from-blue-400 via-indigo-500 to-purple-600 p-4">
+      <div className="max-w-xl w-full bg-white p-8 rounded-xl shadow-2xl border-t-4 border-indigo-400">
+        <div className="mb-6 text-center">
+          <h1 className="text-3xl font-semibold text-gray-800">Profile Setup</h1>
+          <p className="text-gray-500">
+            Step <span className="font-medium text-indigo-500">{step + 1}</span> of {steps.length}:{" "}
+            {steps[step]}
+          </p>
+        </div>
 
-      <div className="bg-white p-6 rounded-lg shadow-md w-96">
-        {/* ✅ Step 1: Basic Info */}
-        {step === 0 && (
-          <>
-            <label className="block text-sm font-medium text-gray-700">Full Name</label>
-            <input
-              type="text"
-              name="name"
-              value={profile.name}
-              disabled
-              className="w-full p-2 mb-3 border bg-gray-100"
-            />
+        <div className="flex justify-between items-center mb-6">
+          {steps.map((label, index) => (
+            <div key={index} className="flex-1 flex flex-col items-center relative">
+              <div
+                className={`w-8 h-8 flex items-center justify-center rounded-full border-2 ${
+                  index <= step
+                    ? "bg-indigo-500 border-indigo-500 text-white"
+                    : "border-gray-300 text-gray-400"
+                }`}
+              >
+                {index + 1}
+              </div>
+              <span
+                className={`text-xs mt-1 ${index <= step ? "text-indigo-500" : "text-gray-400"}`}
+              >
+                {label}
+              </span>
+            </div>
+          ))}
+        </div>
 
-            <label className="block text-sm font-medium text-gray-700">Age</label>
-            <input
-              type="number"
-              name="age"
-              value={profile.age}
-              onChange={handleChange}
-              className="w-full p-2 mb-3 border"
-            />
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={step}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.3 }}
+          >
+            <div className="p-4 bg-gray-50 rounded-md shadow-inner">
+              {step === 0 && (
+                <>
+                  <label className="block text-sm text-gray-700">Full Name</label>
+                  <input
+                    type="text"
+                    name="name"
+                    value={profile.name}
+                    disabled
+                    className="w-full p-2 mb-3 border rounded bg-gray-100"
+                  />
 
-            <label className="block text-sm font-medium text-gray-700">Gender</label>
-            <select
-              name="gender"
-              value={profile.gender}
-              onChange={handleChange}
-              className="w-full p-2 mb-3 border"
-            >
-              <option value="">Select Gender</option>
-              <option value="Male">Male</option>
-              <option value="Female">Female</option>
-              <option value="Other">Other</option>
-            </select>
+                  <label className="block text-sm text-gray-700">Age</label>
+                  <input
+                    type="number"
+                    name="age"
+                    value={profile.age}
+                    onChange={handleChange}
+                    className="w-full p-2 mb-3 border rounded focus:ring-2 focus:ring-indigo-400"
+                  />
 
-            {profile.gender === "Female" && (
-              <>
-                <label className="block text-sm font-medium text-gray-700">Pregnant</label>
-                <select
-                  name="isPregnant"
-                  value={profile.isPregnant ? "true" : "false"}
-                  onChange={handleChange}
-                  className="w-full p-2 mb-3 border"
-                >
-                  <option value="false">No</option>
-                  <option value="true">Yes</option>
-                </select>
-              </>
-            )}
-          </>
-        )}
+                  <label className="block text-sm text-gray-700">Gender</label>
+                  <select
+                    name="gender"
+                    value={profile.gender}
+                    onChange={handleChange}
+                    className="w-full p-2 mb-3 border rounded focus:ring-2 focus:ring-indigo-400"
+                  >
+                    <option>Select Gender</option>
+                    <option>Male</option>
+                    <option>Female</option>
+                    <option>Other</option>
+                  </select>
 
-        {/* ✅ Step 2: Physical Attributes */}
-        {step === 1 && (
-          <>
-            <label className="block text-sm font-medium text-gray-700">Height (cm)</label>
-            <input
-              type="number"
-              name="height"
-              value={profile.height ?? ""}
-              onChange={handleChange}
-              className="w-full p-2 mb-3 border"
-            />
+                  {profile.gender === "Female" && (
+                    <>
+                      <label className="block text-sm text-gray-700">Pregnant</label>
+                      <select
+                        name="isPregnant"
+                        value={profile.isPregnant ? "true" : "false"}
+                        onChange={handleChange}
+                        className="w-full p-2 mb-3 border rounded focus:ring-2 focus:ring-indigo-400"
+                      >
+                        <option value="false">No</option>
+                        <option value="true">Yes</option>
+                      </select>
+                    </>
+                  )}
+                </>
+              )}
+              {step === 1 && (
+                <>
+                  <label className="block text-sm text-gray-700">Height (cm)</label>
+                  <input
+                    type="number"
+                    name="height"
+                    value={profile.height ?? ""}
+                    onChange={handleChange}
+                    className="w-full p-2 mb-3 border rounded focus:ring-2 focus:ring-indigo-400"
+                  />
 
-            <label className="block text-sm font-medium text-gray-700">Weight (kg)</label>
-            <input
-              type="number"
-              name="weight"
-              value={profile.weight ?? ""}
-              onChange={handleChange}
-              className="w-full p-2 mb-3 border"
-            />
+                  <label className="block text-sm text-gray-700">Weight (kg)</label>
+                  <input
+                    type="number"
+                    name="weight"
+                    value={profile.weight ?? ""}
+                    onChange={handleChange}
+                    className="w-full p-2 mb-3 border rounded focus:ring-2 focus:ring-indigo-400"
+                  />
 
-            <label className="block text-sm font-medium text-gray-700">BMI</label>
-            <input
-              type="number"
-              name="bmi"
-              value={profile.bmi ?? ""}
-              disabled
-              className="w-full p-2 mb-3 border bg-gray-100"
-            />
-          </>
-        )}
+                  <label className="block text-sm text-gray-700">BMI</label>
+                  <input
+                    type="number"
+                    name="bmi"
+                    value={profile.bmi ?? ""}
+                    disabled
+                    className="w-full p-2 mb-3 border rounded bg-gray-100"
+                  />
+                </>
+              )}
 
-        {/* ✅ Step 3: Medical History */}
-        {step === 2 && (
-          <>
-            <label className="block text-sm font-medium text-gray-700">Blood Type</label>
-            <input
-              type="text"
-              name="bloodType"
-              value={profile.bloodType}
-              onChange={handleChange}
-              className="w-full p-2 mb-3 border"
-            />
+              {step === 2 && (
+                <>
+                  <label className="block text-sm text-gray-700">Blood Type</label>
+                  <input
+                    type="text"
+                    name="bloodType"
+                    value={profile.bloodType}
+                    onChange={handleChange}
+                    className="w-full p-2 mb-3 border rounded focus:ring-2 focus:ring-indigo-400"
+                  />
 
-            <label className="block text-sm font-medium text-gray-700">Allergies</label>
-            <input
-              type="text"
-              name="allergies"
-              value={profile.allergies}
-              onChange={handleChange}
-              className="w-full p-2 mb-3 border"
-            />
-          </>
-        )}
+                  <label className="block text-sm text-gray-700">Allergies</label>
+                  <input
+                    type="text"
+                    name="allergies"
+                    value={profile.allergies}
+                    onChange={handleChange}
+                    className="w-full p-2 mb-3 border rounded focus:ring-2 focus:ring-indigo-400"
+                  />
 
-        {/* ✅ Step 4: Lifestyle */}
-        {step === 3 && (
-          <>
-            <label className="block text-sm font-medium text-gray-700">Family History</label>
-            <input
-              type="text"
-              name="familyHistory"
-              value={profile.familyHistory}
-              onChange={handleChange}
-              className="w-full p-2 mb-3 border"
-            />
+                  <label className="block text-sm text-gray-700">Medications</label>
+                  <input
+                    type="text"
+                    name="medications"
+                    value={profile.medications}
+                    onChange={handleChange}
+                    className="w-full p-2 mb-3 border rounded focus:ring-2 focus:ring-indigo-400"
+                  />
+                </>
+              )}
 
-            <label className="block text-sm font-medium text-gray-700">Activity Level</label>
-            <input
-              type="text"
-              name="activityLevel"
-              value={profile.activityLevel}
-              onChange={handleChange}
-              className="w-full p-2 mb-3 border"
-            />
+              {step === 3 && (
+                <>
+                  <label className="block text-sm text-gray-700">Family History</label>
+                  <input
+                    type="text"
+                    name="familyHistory"
+                    value={profile.familyHistory}
+                    onChange={handleChange}
+                    className="w-full p-2 mb-3 border rounded focus:ring-2 focus:ring-indigo-400"
+                  />
 
-            <label className="block text-sm font-medium text-gray-700">Diet</label>
-            <input
-              type="text"
-              name="diet"
-              value={profile.diet}
-              onChange={handleChange}
-              className="w-full p-2 mb-3 border"
-            />
-          </>
-        )}
+                  <label className="block text-sm text-gray-700">Activity Level</label>
+                  <input
+                    type="text"
+                    name="activityLevel"
+                    value={profile.activityLevel}
+                    onChange={handleChange}
+                    className="w-full p-2 mb-3 border rounded focus:ring-2 focus:ring-indigo-400"
+                  />
 
-        {/* ✅ Step Navigation Buttons */}
-        <div className="flex justify-between mt-4">
+                  <label className="block text-sm text-gray-700">Diet</label>
+                  <input
+                    type="text"
+                    name="diet"
+                    value={profile.diet}
+                    onChange={handleChange}
+                    className="w-full p-2 mb-3 border rounded focus:ring-2 focus:ring-indigo-400"
+                  />
+                </>
+              )}
+            </div>
+          </motion.div>
+        </AnimatePresence>
+
+        <div className="flex justify-between mt-6">
           {step > 0 && (
             <button
               onClick={handlePrev}
-              className="w-2/5 bg-gray-400 text-white p-2 rounded hover:bg-gray-500"
+              className="px-5 py-2 bg-gray-300 rounded hover:bg-gray-400 transition duration-200"
             >
-              Back
+              Previous
             </button>
           )}
-          {step < steps.length - 1 ? (
+
+          {step < steps.length - 1 && (
             <button
               onClick={handleNext}
-              className="w-2/5 bg-blue-500 text-white p-2 rounded hover:bg-blue-600"
+              className="px-5 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 transition duration-200"
             >
               Next
             </button>
-          ) : (
+          )}
+
+          {step === steps.length - 1 && (
             <button
               onClick={handleSaveProfile}
-              className="w-2/5 bg-green-500 text-white p-2 rounded hover:bg-green-600"
+              className="px-5 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition duration-200"
             >
               {saving ? "Saving..." : "Save"}
             </button>
           )}
         </div>
 
-        <button onClick={handleSkip} className="mt-4 text-sm text-gray-500 underline">
-          Skip for now
-        </button>
+        <div className="text-center">
+          <button
+            onClick={handleSkip}
+            className="mt-4 text-sm text-gray-500 hover:text-gray-700 underline transition duration-200"
+          >
+            Skip for now
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -46696,39 +46819,63 @@ import Link from "next/link";
 import { signOut, useSession } from "next-auth/react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import type { UserProfile } from "@/types/UserProfile";
 
 export const Navbar = () => {
   const { data: session } = useSession();
   const router = useRouter();
+  const [profileComplete, setProfileComplete] = useState<boolean>(false);
+
+  useEffect(() => {
+    async function checkProfile() {
+      const res = await fetch("/api/profile");
+      if (res.ok) {
+        const data: UserProfile = await res.json();
+        setProfileComplete(data.isProfileComplete);
+      }
+    }
+
+    if (session) {
+      checkProfile();
+    }
+  }, [session]);
+
+  const handleProfileClick = () => {
+    if (profileComplete) {
+      router.push("/dashboard?section=profile");
+    } else {
+      router.push("/profile");
+    }
+  };
 
   const handleLogout = async () => {
-    await signOut({ redirect: false }); // Sign out user
-    router.push("/"); // Redirect to homepage
+    await signOut({ redirect: false });
+    router.push("/");
   };
 
   return (
     <nav className="bg-gray-800 text-white p-4">
       <div className="container mx-auto flex justify-between items-center">
-        {/* AiCare Logo */}
         <h1 className="text-2xl font-bold">AiCare</h1>
 
-        {/* Navigation Links */}
         <div className="flex space-x-6 items-center">
           <Link href="/" className="hover:text-gray-300">
             Home
           </Link>
-          <Link href="/profile" className="hover:text-gray-300">
+
+          <button onClick={handleProfileClick} className="hover:text-gray-300">
             Profile
-          </Link>
+          </button>
+
           <Link href="/assessment" className="hover:text-gray-300">
             Smart Assessment
           </Link>
 
-          {/* Show User Info & Logout Button ONLY if Logged In */}
           {session && session.user && (
             <div className="flex items-center space-x-3">
               <Image
-                src={session.user.image || "/assets/avatar.png"} // User avatar or default avatar
+                src={session.user.image || "/assets/avatar.png"}
                 alt="User Avatar"
                 width={36}
                 height={36}
@@ -46784,8 +46931,7 @@ export default function PasswordRequirements({ password }: PasswordRequirementsP
 ### /workspaces/aicare/aicare-app/src/components/PatientProfile.tsx
 ```
 "use client";
-import { useState } from "react";
-import { ChangeEvent } from "react"; // ✅ Import ChangeEvent from React
+import { useState, ChangeEvent } from "react";
 
 interface PatientProfileProps {
   name: string;
@@ -46795,14 +46941,15 @@ interface PatientProfileProps {
   weight: number | null;
   bmi: number | null;
   bloodType: string;
-  pregnant: boolean; // ✅ Ensure correct prop name
+  pregnant: boolean;
   allergies: string;
   medications: string;
   familyHistory: string;
   activityLevel: string;
   diet: string;
   handleChange: (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void;
-  handlePregnantChange: (value: boolean) => void; // ✅ This must be passed from Dashboard
+  handlePregnantChange: (value: boolean) => void;
+  editable?: boolean;
 }
 
 const PatientProfile: React.FC<PatientProfileProps> = ({
@@ -46820,7 +46967,8 @@ const PatientProfile: React.FC<PatientProfileProps> = ({
   activityLevel,
   diet,
   handleChange,
-  handlePregnantChange // ✅ Accept new handler
+  handlePregnantChange,
+  editable = false
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -46836,12 +46984,12 @@ const PatientProfile: React.FC<PatientProfileProps> = ({
         </button>
       </div>
 
-      {/* Essential Details (Always Visible) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
         <div>
           <label className="block text-sm font-medium text-gray-700">Name</label>
           <input
             type="text"
+            name="name"
             value={name}
             disabled
             className="w-full p-2 border rounded-md bg-gray-100"
@@ -46854,8 +47002,9 @@ const PatientProfile: React.FC<PatientProfileProps> = ({
             type="number"
             name="age"
             value={age}
+            disabled={!editable}
             onChange={handleChange}
-            className="w-full p-2 border rounded-md"
+            className={`w-full p-2 border rounded-md ${!editable ? "bg-gray-100" : ""}`}
           />
         </div>
 
@@ -46864,8 +47013,9 @@ const PatientProfile: React.FC<PatientProfileProps> = ({
           <select
             name="gender"
             value={gender}
+            disabled={!editable}
             onChange={handleChange}
-            className="w-full p-2 border rounded-md"
+            className={`w-full p-2 border rounded-md ${!editable ? "bg-gray-100" : ""}`}
           >
             <option value="">Select Gender</option>
             <option value="Male">Male</option>
@@ -46879,8 +47029,9 @@ const PatientProfile: React.FC<PatientProfileProps> = ({
           <select
             name="bloodType"
             value={bloodType}
+            disabled={!editable}
             onChange={handleChange}
-            className="w-full p-2 border rounded-md"
+            className={`w-full p-2 border rounded-md ${!editable ? "bg-gray-100" : ""}`}
           >
             <option value="">Select Blood Type</option>
             <option value="A+">A+</option>
@@ -46895,7 +47046,6 @@ const PatientProfile: React.FC<PatientProfileProps> = ({
         </div>
       </div>
 
-      {/* Expanded Details (Hidden Until Expanded) */}
       {isExpanded && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
           <div>
@@ -46903,9 +47053,10 @@ const PatientProfile: React.FC<PatientProfileProps> = ({
             <input
               type="number"
               name="height"
-              value={height || ""}
+              value={height ?? ""}
+              disabled={!editable}
               onChange={handleChange}
-              className="w-full p-2 border rounded-md"
+              className={`w-full p-2 border rounded-md ${!editable ? "bg-gray-100" : ""}`}
             />
           </div>
 
@@ -46914,9 +47065,10 @@ const PatientProfile: React.FC<PatientProfileProps> = ({
             <input
               type="number"
               name="weight"
-              value={weight || ""}
+              value={weight ?? ""}
+              disabled={!editable}
               onChange={handleChange}
-              className="w-full p-2 border rounded-md"
+              className={`w-full p-2 border rounded-md ${!editable ? "bg-gray-100" : ""}`}
             />
           </div>
 
@@ -46925,22 +47077,20 @@ const PatientProfile: React.FC<PatientProfileProps> = ({
             <input
               type="number"
               name="bmi"
-              value={bmi || ""}
+              value={bmi ?? ""}
               disabled
               className="w-full p-2 border rounded-md bg-gray-100"
             />
           </div>
-
-          {/* ✅ Show Pregnant Field Only for Female */}
-          {/* ✅ Show Pregnant Field Only for Female */}
           {gender === "Female" && (
             <div>
               <label className="block text-sm font-medium text-gray-700">Pregnant</label>
               <select
                 name="isPregnant"
                 value={pregnant ? "true" : "false"}
-                onChange={(e) => handlePregnantChange(e.target.value === "true")} // ✅ Pass boolean directly
-                className="w-full p-2 border rounded-md"
+                disabled={!editable}
+                onChange={(e) => handlePregnantChange(e.target.value === "true")}
+                className={`w-full p-2 border rounded-md ${!editable ? "bg-gray-100" : ""}`}
               >
                 <option value="false">No</option>
                 <option value="true">Yes</option>
@@ -46954,8 +47104,9 @@ const PatientProfile: React.FC<PatientProfileProps> = ({
               type="text"
               name="allergies"
               value={allergies}
+              disabled={!editable}
               onChange={handleChange}
-              className="w-full p-2 border rounded-md"
+              className={`w-full p-2 border rounded-md ${!editable ? "bg-gray-100" : ""}`}
             />
           </div>
 
@@ -46965,8 +47116,9 @@ const PatientProfile: React.FC<PatientProfileProps> = ({
               type="text"
               name="medications"
               value={medications}
+              disabled={!editable}
               onChange={handleChange}
-              className="w-full p-2 border rounded-md"
+              className={`w-full p-2 border rounded-md ${!editable ? "bg-gray-100" : ""}`}
             />
           </div>
 
@@ -46976,8 +47128,9 @@ const PatientProfile: React.FC<PatientProfileProps> = ({
               type="text"
               name="familyHistory"
               value={familyHistory}
+              disabled={!editable}
               onChange={handleChange}
-              className="w-full p-2 border rounded-md"
+              className={`w-full p-2 border rounded-md ${!editable ? "bg-gray-100" : ""}`}
             />
           </div>
 
@@ -46987,8 +47140,9 @@ const PatientProfile: React.FC<PatientProfileProps> = ({
               type="text"
               name="activityLevel"
               value={activityLevel}
+              disabled={!editable}
               onChange={handleChange}
-              className="w-full p-2 border rounded-md"
+              className={`w-full p-2 border rounded-md ${!editable ? "bg-gray-100" : ""}`}
             />
           </div>
 
@@ -46998,8 +47152,9 @@ const PatientProfile: React.FC<PatientProfileProps> = ({
               type="text"
               name="diet"
               value={diet}
+              disabled={!editable}
               onChange={handleChange}
-              className="w-full p-2 border rounded-md"
+              className={`w-full p-2 border rounded-md ${!editable ? "bg-gray-100" : ""}`}
             />
           </div>
         </div>
@@ -47009,6 +47164,31 @@ const PatientProfile: React.FC<PatientProfileProps> = ({
 };
 
 export default PatientProfile;
+```
+
+### /workspaces/aicare/aicare-app/src/components/ProfileProgressBar.tsx
+```
+// src/components/ProfileProgressBar.tsx
+"use client";
+
+import React from "react";
+
+interface ProfileProgressBarProps {
+  completionPercentage: number;
+}
+
+const ProfileProgressBar: React.FC<ProfileProgressBarProps> = ({ completionPercentage }) => {
+  return (
+    <div className="w-full bg-gray-200 rounded-full h-3">
+      <div
+        className={`bg-green-500 h-3 rounded-full transition-all duration-500 ease-in-out`}
+        style={{ width: `${completionPercentage}%` }}
+      />
+    </div>
+  );
+};
+
+export default ProfileProgressBar;
 ```
 
 ### /workspaces/aicare/aicare-app/src/components/Providers.tsx
@@ -47423,6 +47603,73 @@ import mammoth from "mammoth";
 export async function parseDocx(buffer: Buffer): Promise<string> {
   const result = await mammoth.extractRawText({ buffer });
   return result.value;
+}
+```
+
+### /workspaces/aicare/aicare-app/src/lib/fileParsers/parseHtmlCheerio.ts
+```
+import * as cheerio from "cheerio";
+
+export async function parseHtmlCheerio(htmlContent: string): Promise<string> {
+  const $ = cheerio.load(htmlContent);
+
+  // explicitly extract text content with proper formatting
+  const extractedText = $("body").text().replace(/\s+/g, " ").trim();
+
+  return extractedText;
+}
+```
+
+### /workspaces/aicare/aicare-app/src/lib/fileParsers/parseHtmlDocling.ts
+```
+import { exec } from "child_process";
+import path from "path";
+import fs from "fs";
+
+export async function parseHtmlDocling(filePath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const doclingEnvPath = path.join(process.cwd(), ".venv-docling/bin/docling");
+
+    if (!fs.existsSync(filePath)) {
+      reject(new Error(`File not found: ${filePath}`));
+      return;
+    }
+
+    exec(`${doclingEnvPath} ${filePath}`, (error, stdout, stderr) => {
+      if (error) {
+        reject(new Error(`Docling HTML parsing error: ${stderr}`));
+        return;
+      }
+      console.log("🔍 Docling Extracted Text:", stdout); // explicitly log extracted text
+      resolve(stdout);
+    });
+  });
+}
+```
+
+### /workspaces/aicare/aicare-app/src/lib/fileParsers/parseRtfDocling.ts
+```
+import { runDocling } from "@/utils/runDocling";
+import fs from "fs";
+import path from "path";
+
+export async function parseRtfWithDocling(buffer: Buffer): Promise<string> {
+  const tmpDir = path.join(process.cwd(), "tmp");
+  if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+
+  const tempFilePath = path.join(tmpDir, `temp-${Date.now()}.rtf`);
+  fs.writeFileSync(tempFilePath, buffer);
+
+  try {
+    const result = await runDocling(tempFilePath);
+    console.log("✅ Docling output explicitly:", result);
+    return (result.doclingMarkdown as string) || "";
+  } catch (error) {
+    console.error("❌ Docling parsing error explicitly:", error);
+    throw new Error(`Docling RTF parsing explicitly failed: ${error.message || error}`);
+  } finally {
+    fs.unlinkSync(tempFilePath); // Cleanup temp file explicitly
+  }
 }
 ```
 
@@ -47975,16 +48222,17 @@ export interface UserProfile {
   email: string;
   age: number;
   gender: string;
-  height: number | null;
-  weight: number | null;
-  bmi: number | null;
-  bloodType: string;
-  isPregnant: boolean;
   allergies: string;
   medications: string;
   familyHistory: string;
   activityLevel: string;
   diet: string;
+  height: number | null;
+  weight: number | null;
+  bmi: number | null;
+  bloodType: string;
+  isPregnant: boolean;
+  isProfileComplete: boolean; // ✅ explicitly add this line
 }
 ```
 
