@@ -8,7 +8,8 @@ import { parseDocumentWithTextract } from "@/lib/aws/textractParser";
 import { parseMedicalTextWithGPT } from "@/lib/ai/gptMedicalParser";
 import { generateSchemaSummary } from "@/lib/mongodb/schemaSummary";
 import { parseDocx } from "@/lib/fileParsers/parseDocx"; // ✅ explicit DOCX parser import
-import { parseRtf } from "@/lib/fileParsers/parseRtf"; // ✅ explicit RTF parser import
+import { parseRtfWithDocling } from "@/lib/fileParsers/parseRtfDocling"; // ✅ explicit Docling parser import
+import { convert } from "html-to-text";
 
 const ALLOWED_FILE_TYPES = [
   "application/pdf",
@@ -20,7 +21,9 @@ const ALLOWED_FILE_TYPES = [
   "application/vnd.ms-excel",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "application/rtf",
-  "text/rtf" // ✅ explicitly add this line
+  "text/rtf",
+  "application/msword",
+  "text/html"
 ];
 
 export async function POST(req: NextRequest) {
@@ -60,6 +63,7 @@ export async function POST(req: NextRequest) {
     }
 
     const fileType = file.type;
+    console.log("🔍 Explicit File MIME Type:", fileType); // explicitly log the MIME type
 
     if (!ALLOWED_FILE_TYPES.includes(fileType)) {
       return NextResponse.json({ error: "Invalid file type uploaded" }, { status: 400 });
@@ -77,7 +81,8 @@ export async function POST(req: NextRequest) {
 
     let extractedText = "";
 
-    // Conditional Parsing based on File Type
+    // Explicit conditional parsing based on File Type
+    // Explicit parsing condition:
     if (["application/pdf", "image/jpeg", "image/png"].includes(fileType)) {
       const textractResult = await parseDocumentWithTextract(
         "aicare-medical-records-uploads",
@@ -87,11 +92,15 @@ export async function POST(req: NextRequest) {
     } else if (
       fileType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     ) {
-      extractedText = await parseDocx(fileBuffer); // ✅ explicit DOCX parsing
-    } else if (fileType === "application/rtf") {
-      extractedText = await parseRtf(fileBuffer); // ✅ explicit RTF parsing
+      extractedText = await parseDocx(fileBuffer);
+    } else if (["application/rtf", "text/rtf", "application/msword"].includes(fileType)) {
+      extractedText = await parseRtfWithDocling(fileBuffer);
     } else if (["text/plain", "text/csv"].includes(fileType)) {
-      extractedText = fileBuffer.toString("utf-8"); // ✅ explicit TXT/CSV parsing
+      extractedText = fileBuffer.toString("utf-8");
+    } else if (fileType === "text/html") {
+      // ✅ explicitly handle HTML parsing
+      const htmlContent = fileBuffer.toString("utf-8");
+      extractedText = convert(htmlContent, { wordwrap: false });
     } else {
       return NextResponse.json({ error: "Unsupported file type for parsing" }, { status: 400 });
     }

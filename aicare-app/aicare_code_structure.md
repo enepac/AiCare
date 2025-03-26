@@ -140,8 +140,9 @@ aicare-app
     ├── scripts
     │   ├── build
     │   │   └── generate_code_snapshot.js
+    │   ├── check-records.ts
     │   ├── generate_code_snapshot.ts
-    │   ├── generateSchema.mjs
+    │   ├── generate-schema.ts
     │   └── ocr.ts
     ├── smtp-test.js
     ├── source_code.md
@@ -257,6 +258,10 @@ aicare-app
     │   │   ├── cron.ts
     │   │   ├── db
     │   │   │   └── saveParsedRecord.ts
+    │   │   ├── fileParsers
+    │   │   │   ├── parseDocx.ts
+    │   │   │   ├── parseRtfDocling.ts
+    │   │   │   └── parseRtf.ts
     │   │   ├── mongodb
     │   │   │   ├── saveParsedAI.ts
     │   │   │   └── schemaSummary.ts
@@ -43744,6 +43749,33 @@ export async function POST(req: NextRequest) {
 }
 ```
 
+### /workspaces/aicare/aicare-app/src/app/api/cron/route.ts
+```
+import { NextRequest, NextResponse } from "next/server";
+import { generateSchemaSummary } from "@/lib/mongodb/schemaSummary";
+
+export const dynamic = "force-dynamic";
+
+// Simple security using a cron token
+const CRON_SECRET = process.env.CRON_SECRET || "change_this_to_a_secret";
+
+export async function GET(req: NextRequest) {
+  const token = req.headers.get("Authorization")?.split("Bearer ")[1];
+
+  if (!token || token !== CRON_SECRET) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    await generateSchemaSummary();
+    return NextResponse.json({ message: "Schema summary generated successfully" });
+  } catch (error) {
+    console.error("Cron job error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+```
+
 ### /workspaces/aicare/aicare-app/src/app/api/dashboard/profile/route.ts
 ```
 import { NextResponse } from "next/server";
@@ -43984,7 +44016,6 @@ export async function GET(req: NextRequest) {
 
     console.log("🔍 Debug: Decoded Token →", decodedToken);
 
-    // ✅ Ensure token is not expired
     if (!decodedToken || !decodedToken.email) {
       console.warn("❌ Unauthorized request: Invalid token structure.");
       return NextResponse.json({ error: "Unauthorized - Invalid token" }, { status: 401 });
@@ -44005,22 +44036,19 @@ export async function GET(req: NextRequest) {
   try {
     // ✅ Extract and validate query parameters
     const url = new URL(req.url);
-    const fileType = url.searchParams.get("type") || undefined; // Optional file type filter
-    const limit = Number(url.searchParams.get("limit")) || 10; // Optional limit (default: 10)
+    const fileType = url.searchParams.get("type") || undefined;
+    const limit = Number(url.searchParams.get("limit")) || 10;
 
-    // ✅ Validate file type (only allow predefined types)
     if (fileType && !ALLOWED_FILE_TYPES.includes(fileType)) {
       console.warn(`❌ Invalid file type requested: ${fileType}`);
       return NextResponse.json({ error: "Invalid file type" }, { status: 400 });
     }
 
-    // ✅ Validate limit (ensure reasonable range)
     if (isNaN(limit) || limit < 1 || limit > 100) {
       console.warn(`❌ Invalid limit requested: ${limit}`);
       return NextResponse.json({ error: "Limit must be between 1 and 100" }, { status: 400 });
     }
 
-    // ✅ Use a strictly typed query
     const query: MedicalRecordQuery = { userEmail };
     if (fileType) {
       query.fileType = fileType;
@@ -44028,19 +44056,22 @@ export async function GET(req: NextRequest) {
 
     console.log("🔍 Debug: Querying DB with →", query);
 
-    const records = await MedicalRecord.find(query).limit(limit).sort({ uploadDate: -1 });
+    const records = await MedicalRecord.find(query).limit(limit).sort({ uploadDate: -1 }).lean();
 
     console.log(`✅ Retrieved ${records.length} Records for ${userEmail}`);
 
     return NextResponse.json({
-      records: records.map((record) => ({
-        _id: record._id,
-        fileName: record.fileName,
-        fileType: record.fileType,
-        uploadDate: record.uploadDate,
-        filePath: record.filePath,
-        parsedAI: record.parsedAI || null // clearly integrated AI insights
-      }))
+      records: records.map(
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        ({ _id, fileName, fileType, uploadDate, filePath, userEmail, __v, ...dynamicFields }) => ({
+          _id,
+          fileName,
+          fileType,
+          uploadDate,
+          filePath,
+          parsedAI: dynamicFields
+        })
+      )
     });
   } catch (error) {
     console.error("❌ Error fetching medical records:", error);
@@ -44059,9 +44090,25 @@ import mime from "mime-types";
 import { uploadFileToS3 } from "@/lib/aws/s3Uploader";
 import { parseDocumentWithTextract } from "@/lib/aws/textractParser";
 import { parseMedicalTextWithGPT } from "@/lib/ai/gptMedicalParser";
-import { generateSchemaSummary } from "@/lib/mongodb/schemaSummary"; // ✅ added import
+import { generateSchemaSummary } from "@/lib/mongodb/schemaSummary";
+import { parseDocx } from "@/lib/fileParsers/parseDocx"; // ✅ explicit DOCX parser import
+import { parseRtfWithDocling } from "@/lib/fileParsers/parseRtfDocling"; // ✅ explicit Docling parser import
+import { convert } from "html-to-text";
 
-const ALLOWED_TYPES = ["application/pdf", "image/jpeg", "image/png", "application/dicom"];
+const ALLOWED_FILE_TYPES = [
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "application/dicom",
+  "text/plain",
+  "text/csv",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/rtf",
+  "text/rtf",
+  "application/msword",
+  "text/html"
+];
 
 export async function POST(req: NextRequest) {
   await dbConnect();
@@ -44099,9 +44146,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
-    const fileType = mime.lookup(file.name);
-    if (!fileType || !ALLOWED_TYPES.includes(fileType)) {
-      return NextResponse.json({ error: "Invalid file type" }, { status: 400 });
+    const fileType = file.type;
+    console.log("🔍 Explicit File MIME Type:", fileType); // explicitly log the MIME type
+
+    if (!ALLOWED_FILE_TYPES.includes(fileType)) {
+      return NextResponse.json({ error: "Invalid file type uploaded" }, { status: 400 });
     }
 
     const fileExtension = mime.extension(fileType);
@@ -44114,31 +44163,52 @@ export async function POST(req: NextRequest) {
     const s3Url = await uploadFileToS3(fileBuffer, fileName, fileType);
     console.log("✅ File successfully uploaded to S3:", s3Url);
 
-    // Textract parsing
-    const textractResult = await parseDocumentWithTextract(
-      "aicare-medical-records-uploads",
-      fileName
-    );
-    console.log("✅ Extracted Text:", textractResult.extractedText);
+    let extractedText = "";
 
-    // GPT-powered structured parsing with consistent field names
-    const structuredData = await parseMedicalTextWithGPT(textractResult.extractedText);
+    // Explicit conditional parsing based on File Type
+    // Explicit parsing condition:
+    if (["application/pdf", "image/jpeg", "image/png"].includes(fileType)) {
+      const textractResult = await parseDocumentWithTextract(
+        "aicare-medical-records-uploads",
+        fileName
+      );
+      extractedText = textractResult.extractedText;
+    } else if (
+      fileType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    ) {
+      extractedText = await parseDocx(fileBuffer);
+    } else if (["application/rtf", "text/rtf", "application/msword"].includes(fileType)) {
+      extractedText = await parseRtfWithDocling(fileBuffer);
+    } else if (["text/plain", "text/csv"].includes(fileType)) {
+      extractedText = fileBuffer.toString("utf-8");
+    } else if (fileType === "text/html") {
+      // ✅ explicitly handle HTML parsing
+      const htmlContent = fileBuffer.toString("utf-8");
+      extractedText = convert(htmlContent, { wordwrap: false });
+    } else {
+      return NextResponse.json({ error: "Unsupported file type for parsing" }, { status: 400 });
+    }
+
+    console.log("✅ Extracted Text:", extractedText);
+
+    // GPT-powered structured parsing
+    const structuredData = await parseMedicalTextWithGPT(extractedText);
     console.log("✅ GPT Structured Data:", structuredData);
 
-    // Save dynamically structured data directly to MongoDB (dynamic schema)
+    // Save dynamically structured data directly to MongoDB
     const newRecord = new MedicalRecord({
       userEmail,
       fileName,
       fileType,
       uploadDate: new Date(),
       filePath: s3Url,
-      ...structuredData // Dynamically merge GPT-structured fields
+      ...structuredData
     });
 
     const savedRecord = await newRecord.save();
     console.log("✅ Medical record (dynamic structured fields) saved:", savedRecord);
 
-    // ✅ Immediately regenerate schema summary after every upload
+    // Regenerate schema summary after every upload
     await generateSchemaSummary();
     console.log("✅ Schema summary updated after upload.");
 
@@ -44150,7 +44220,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error("❌ Error during file processing:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json({ error: error.message || "Internal server error" }, { status: 500 });
   }
 }
 
@@ -46012,42 +46082,20 @@ export default function MedicalRecords() {
 
       // ✅ Map dynamic schema directly to parsedAI for frontend compatibility
       // ✅ Corrected dynamic schema mapping
-      const records = data.records.map(
-        ({
+      const records = data.records.map((record) => {
+        const { _id, userEmail, fileName, fileType, uploadDate, filePath, __v, ...parsedAIFields } =
+          record;
+
+        return {
           _id,
           userEmail,
           fileName,
           fileType,
           uploadDate,
           filePath,
-          __v,
-          patient_name,
-          age,
-          chief_complaint,
-          findings,
-          assessment,
-          plan_medications,
-          plan_follow_up,
-          ...rest
-        }) => ({
-          _id,
-          userEmail,
-          fileName,
-          fileType,
-          uploadDate,
-          filePath,
-          parsedAI: {
-            patient_name,
-            age,
-            chief_complaint,
-            findings,
-            assessment,
-            plan_medications,
-            plan_follow_up,
-            ...rest
-          }
-        })
-      );
+          parsedAI: parsedAIFields // explicitly fix to directly pass dynamic fields
+        };
+      });
 
       setRecords(records);
     } catch (err) {
@@ -46083,7 +46131,12 @@ export default function MedicalRecords() {
         body: formData
       });
 
-      if (!res.ok) throw new Error("Upload failed");
+      if (!res.ok) {
+        const errorResponse = await res.json();
+        console.error("Backend Error explicitly:", errorResponse);
+        throw new Error(errorResponse.error || "Upload failed");
+      }
+
       await fetchRecords();
     } catch (err) {
       setError("Error uploading file.");
@@ -47040,6 +47093,40 @@ export default function Sidebar({ setActiveFeature }: SidebarProps) {
 }
 ```
 
+### /workspaces/aicare/aicare-app/src/lib/ai/gptMedicalParser.ts
+```
+import OpenAI from "openai";
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+export async function parseMedicalTextWithGPT(rawText: string): Promise<Record<string, unknown>> {
+  const prompt = `
+  You're an expert medical assistant. Extract all medical information from the provided text clearly and consistently. Use snake_case naming for all fields. Examples include patient_name, age, chief_complaint, diagnosis, medications, allergies, symptoms, follow_up_instructions, etc. 
+
+  If there are additional fields, infer a suitable, predictable, snake_case field name. Provide all data as flat JSON.
+
+  Medical Note:
+  ${rawText}
+
+  JSON Response:
+  `;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4-turbo",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0,
+      response_format: { type: "json_object" }
+    });
+
+    return JSON.parse(completion.choices[0].message.content!);
+  } catch (error) {
+    console.error("❌ GPT Parsing Error:", error);
+    throw error;
+  }
+}
+```
+
 ### /workspaces/aicare/aicare-app/src/lib/authOptions.ts
 ```
 import type { NextAuthOptions } from "next-auth";
@@ -47297,6 +47384,20 @@ export async function extractTextFromDocument(filePath: string): Promise<string>
 }
 ```
 
+### /workspaces/aicare/aicare-app/src/lib/cron.ts
+```
+import cron from "node-cron";
+import { generateSchemaSummary } from "@/lib/mongodb/schemaSummary";
+
+export function startCronJobs() {
+  // Runs at midnight daily
+  cron.schedule("0 0 * * *", async () => {
+    console.log("⏰ Running daily schema summary...");
+    await generateSchemaSummary();
+  });
+}
+```
+
 ### /workspaces/aicare/aicare-app/src/lib/db/saveParsedRecord.ts
 ```
 import { dbConnect } from "@/lib/mongodb";
@@ -47312,6 +47413,33 @@ export async function saveParsedRecord(parsedData: Record<string, unknown>) {
   });
 
   return result.insertedId;
+}
+```
+
+### /workspaces/aicare/aicare-app/src/lib/fileParsers/parseDocx.ts
+```
+import mammoth from "mammoth";
+
+export async function parseDocx(buffer: Buffer): Promise<string> {
+  const result = await mammoth.extractRawText({ buffer });
+  return result.value;
+}
+```
+
+### /workspaces/aicare/aicare-app/src/lib/fileParsers/parseRtf.ts
+```
+import { parseString } from "rtf-parser";
+
+export async function parseRtf(buffer: Buffer): Promise<string> {
+  return new Promise((resolve, reject) => {
+    parseString(buffer.toString("utf-8"), (err, doc) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(doc.content);
+      }
+    });
+  });
 }
 ```
 
@@ -47341,6 +47469,65 @@ export default async function saveParsedAI(recordId: string, parsedAI: Record<st
   } catch (error) {
     console.error("❌ MongoDB Save Error:", error);
     throw error;
+  } finally {
+    await client.close();
+  }
+}
+```
+
+### /workspaces/aicare/aicare-app/src/lib/mongodb/schemaSummary.ts
+```
+import { MongoClient } from "mongodb";
+import fs from "fs";
+import path from "path";
+import dotenv from "dotenv";
+
+dotenv.config({ path: ".env.local" });
+
+export async function generateSchemaSummary() {
+  const mongoUri = process.env.MONGODB_URI;
+
+  if (!mongoUri) {
+    throw new Error("MONGODB_URI is not defined");
+  }
+
+  const dbName = "AiCareDB";
+  const collectionName = "medicalrecords";
+
+  const client = new MongoClient(mongoUri);
+
+  try {
+    await client.connect();
+    const collection = client.db(dbName).collection(collectionName);
+
+    const samples = await collection.find({}).limit(100).toArray();
+
+    const ignoredFields = new Set([
+      "_id",
+      "__v",
+      "userEmail",
+      "fileName",
+      "fileType",
+      "uploadDate",
+      "filePath"
+    ]);
+    const schemaSet = new Set<string>();
+
+    samples.forEach((record) => {
+      Object.keys(record).forEach((key) => {
+        if (!ignoredFields.has(key)) {
+          schemaSet.add(key);
+        }
+      });
+    });
+
+    const schemaSummary = Array.from(schemaSet);
+    const outputPath = path.join(process.cwd(), "schema_summary.json");
+
+    fs.writeFileSync(outputPath, JSON.stringify(schemaSummary, null, 2));
+    console.log("✅ Schema summary generated successfully:", schemaSummary);
+  } catch (error) {
+    console.error("❌ Schema summary generation error:", error);
   } finally {
     await client.close();
   }
