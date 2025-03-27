@@ -1,29 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/authOptions";
-import { dbConnect } from "@/utils/db";
 import Conversation from "@/models/conversation";
+import { dbConnect } from "@/utils/db";
 
 export async function POST(req: NextRequest) {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+  await dbConnect();
 
-    await dbConnect();
+  const body = await req.json(); // Only call req.json() once explicitly here
+  const { title, threadId } = body;
 
-    const { title } = await req.json();
-    const newConversation = await Conversation.create({
-      userId: session.user.id,
-      title: title ?? "New Conversation",
-      messages: [],
-      attachments: []
-    });
-
-    return NextResponse.json({ conversation: newConversation }, { status: 201 });
-  } catch (error) {
-    console.error("Error creating new conversation:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  const existingConversation = await Conversation.findOne({ threadId });
+  if (existingConversation) {
+    return NextResponse.json({ error: "Thread already exists" }, { status: 400 });
   }
+
+  const conversation = await Conversation.create({
+    userId: "67de0c4150ae4251e11d910b", // Hardcoded for testing
+    threadId: threadId || "default-thread",
+    title: title || "Default Thread",
+    messages: []
+  });
+
+  console.log("Created conversation:", conversation);
+
+  return NextResponse.json({
+    threadId: conversation.threadId,
+    title: conversation.title
+  });
 }

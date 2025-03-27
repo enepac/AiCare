@@ -43769,6 +43769,173 @@ export async function POST(req: NextRequest) {
 }
 ```
 
+### /workspaces/aicare/aicare-app/src/app/api/chatbot/new-thread/route.ts
+```
+import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/authOptions";
+import { dbConnect } from "@/utils/db";
+import Conversation from "@/models/conversation";
+
+export async function POST(req: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    await dbConnect();
+
+    const { title } = await req.json();
+    const newConversation = await Conversation.create({
+      userId: session.user.id,
+      title: title ?? "New Conversation",
+      messages: [],
+      attachments: []
+    });
+
+    return NextResponse.json({ conversation: newConversation }, { status: 201 });
+  } catch (error) {
+    console.error("Error creating new conversation:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+```
+
+### /workspaces/aicare/aicare-app/src/app/api/chatbot/route.ts
+```
+// File: /workspaces/aicare/aicare-app/src/app/api/chatbot/route.ts
+
+import { NextRequest, NextResponse } from "next/server";
+import OpenAI from "openai";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/authOptions";
+import { dbConnect } from "@/utils/db";
+import User from "@/models/user";
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+export async function POST(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { messages } = await req.json();
+  if (!messages || !Array.isArray(messages)) {
+    return NextResponse.json({ error: "Valid messages array required" }, { status: 400 });
+  }
+
+  await dbConnect();
+
+  const user = await User.findById(session.user.id).lean();
+
+  const userContext = user
+    ? `Patient profile: Age ${user.age ?? "N/A"}, Gender ${user.gender ?? "N/A"}, Height ${
+        user.height ?? "N/A"
+      } cm, Weight ${user.weight ?? "N/A"} kg, BMI ${
+        user.bmi ?? "N/A"
+      }, Medical History: ${user.familyHistory ?? "N/A"}, Allergies: ${
+        user.allergies ?? "N/A"
+      }, Medications: ${user.medications ?? "N/A"}.`
+    : "Patient profile information is unavailable.";
+
+  const promptMessages = [
+    {
+      role: "system",
+      content: `You are AiCare, an intelligent medical assistant providing guidance based on patient data. ${userContext}`
+    },
+    ...messages
+  ];
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: promptMessages,
+      temperature: 0.3,
+      max_tokens: 1000
+    });
+
+    return NextResponse.json({ reply: completion.choices[0].message.content });
+  } catch (error) {
+    console.error("OpenAI API Error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+```
+
+### /workspaces/aicare/aicare-app/src/app/api/chatbot/threads/route.ts
+```
+import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/authOptions";
+import { dbConnect } from "@/utils/db";
+import Conversation from "@/models/conversation";
+
+export async function GET() {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    await dbConnect();
+
+    // Retrieve all conversations for the authenticated user, sort by most recent update.
+    const threads = await Conversation.find({ userId: session.user.id })
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    return NextResponse.json({ threads }, { status: 200 });
+  } catch (error) {
+    console.error("Error retrieving conversation threads:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+```
+
+### /workspaces/aicare/aicare-app/src/app/api/chatbot/threads/[threadId]/route.ts
+```
+import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/authOptions";
+import { dbConnect } from "@/utils/db";
+import Conversation from "@/models/conversation";
+
+interface RouteParams {
+  params: {
+    threadId: string;
+  };
+}
+
+// GET /api/chatbot/threads/[threadId]
+export async function GET(_req: NextRequest, { params }: RouteParams) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    await dbConnect();
+
+    // Retrieve conversation by _id, ensuring it belongs to the authenticated user
+    const conversation = await Conversation.findOne({
+      _id: params.threadId,
+      userId: session.user.id
+    }).lean();
+
+    if (!conversation) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({ conversation }, { status: 200 });
+  } catch (error) {
+    console.error("Error retrieving single conversation:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+```
+
 ### /workspaces/aicare/aicare-app/src/app/api/cron/route.ts
 ```
 import { NextRequest, NextResponse } from "next/server";
@@ -45211,6 +45378,245 @@ export default function SignupPage() {
           Sign Up
         </button>
       </div>
+    </div>
+  );
+}
+```
+
+### /workspaces/aicare/aicare-app/src/app/chatbot/page.tsx
+```
+"use client";
+
+import React, { useEffect, useState } from "react";
+
+type Thread = {
+  _id: string;
+  title: string;
+};
+
+export default function ChatbotPage() {
+  const [threads, setThreads] = useState<Thread[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function fetchThreads() {
+      try {
+        // Use credentials: 'include' to send the session cookie
+        const res = await fetch("/api/chatbot/threads", { credentials: "include" });
+        if (!res.ok) {
+          setError(`Error: ${res.status} ${res.statusText}`);
+          return;
+        }
+
+        const data = await res.json();
+        setThreads(data.threads || []);
+      } catch (err) {
+        console.error("Error fetching threads:", err);
+        setError("Failed to fetch conversation threads");
+      }
+    }
+
+    fetchThreads();
+  }, []);
+
+  return (
+    <div className="p-4">
+      <h1 className="text-2xl font-bold mb-4">Conversation Threads</h1>
+
+      {error && <div className="text-red-600 mb-4">{error}</div>}
+
+      <ul className="space-y-4">
+        {threads.map((thread) => (
+          <li key={thread._id} className="border p-2 rounded shadow-sm">
+            <div className="font-semibold">{thread.title}</div>
+            <div className="text-xs text-gray-500">Thread ID: {thread._id}</div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+```
+
+### /workspaces/aicare/aicare-app/src/app/chatbot/[threadId]/page.tsx
+```
+"use client";
+
+import React, { useEffect, useState, FormEvent, useRef } from "react";
+import { useParams } from "next/navigation";
+import { io, Socket } from "socket.io-client";
+
+function getParamString(params: Record<string, string | string[]> | null, key: string): string {
+  if (!params) {
+    throw new Error(`Params object is null; expected '${key}'.`);
+  }
+  const val = params[key];
+  if (!val) {
+    throw new Error(`Route param '${key}' not found.`);
+  }
+  if (Array.isArray(val)) {
+    return val[0];
+  }
+  return val;
+}
+
+interface Message {
+  _id?: string;
+  sender: "user" | "ai";
+  content: string;
+  timestamp: string;
+}
+
+interface Conversation {
+  _id: string;
+  userId: string;
+  title: string;
+  messages: Message[];
+}
+
+export default function ThreadPage() {
+  // 1) Grab raw params
+  const rawParams = useParams(); // type is Record<string, string | string[]> | null
+
+  // 2) Safely extract threadId as a string
+  const threadId = getParamString(rawParams, "threadId");
+
+  // The rest is unchanged
+  const [conversation, setConversation] = useState<Conversation | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [newMessage, setNewMessage] = useState("");
+  const socketRef = useRef<Socket | null>(null);
+
+  useEffect(() => {
+    async function fetchThread() {
+      try {
+        setLoading(true);
+        setError(null);
+        const res = await fetch(`/api/chatbot/threads/${threadId}`, {
+          credentials: "include"
+        });
+        if (!res.ok) {
+          setError(`Error ${res.status}: ${res.statusText}`);
+          setLoading(false);
+          return;
+        }
+        const data = await res.json();
+        setConversation(data.conversation);
+      } catch (err) {
+        console.error("Error fetching conversation:", err);
+        setError("Failed to fetch conversation");
+      } finally {
+        setLoading(false);
+      }
+    }
+    if (threadId) fetchThread();
+  }, [threadId]);
+
+  useEffect(() => {
+    if (!threadId) return;
+    const socket = io("http://localhost:4000", {
+      transports: ["websocket"]
+    });
+    socketRef.current = socket;
+
+    socket.on("connect", () => {
+      console.log("Socket connected:", socket.id);
+      socket.emit("joinConversation", threadId);
+    });
+
+    socket.on("disconnect", () => {
+      console.log("Socket disconnected:", socket.id);
+    });
+
+    socket.on("newMessage", (newMsg: Message) => {
+      setConversation((prev) => {
+        if (!prev) return prev;
+        return { ...prev, messages: [...prev.messages, newMsg] };
+      });
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [threadId]);
+
+  async function handleSendMessage(e: FormEvent) {
+    e.preventDefault();
+    if (!newMessage.trim()) return;
+
+    try {
+      const res = await fetch(`/api/chatbot/threads/${threadId}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          sender: "user",
+          content: newMessage
+        })
+      });
+      if (!res.ok) {
+        const errorData = await res.json();
+        setError(errorData.error || `Error ${res.status}`);
+        return;
+      }
+      const updated = await res.json();
+      setConversation(updated.conversation);
+      setNewMessage("");
+    } catch (err) {
+      console.error("Error sending message:", err);
+      setError("Failed to send message");
+    }
+  }
+
+  if (loading) {
+    return <div className="p-4">Loading conversation...</div>;
+  }
+  if (error) {
+    return <div className="p-4 text-red-600">{error}</div>;
+  }
+  if (!conversation) {
+    return <div className="p-4 text-gray-600">Conversation not found.</div>;
+  }
+
+  return (
+    <div className="p-4 space-y-4">
+      <h1 className="text-2xl font-bold">Thread: {conversation.title}</h1>
+      <div className="space-y-2 border rounded p-4">
+        {conversation.messages.length === 0 && <p className="text-gray-500">No messages yet.</p>}
+        {conversation.messages.map((msg) => (
+          <div
+            key={msg._id || Math.random()}
+            className={`flex flex-col ${msg.sender === "user" ? "items-end" : "items-start"}`}
+          >
+            <div
+              className={`rounded px-3 py-2 mb-2 max-w-xs ${
+                msg.sender === "user"
+                  ? "bg-blue-500 text-white self-end"
+                  : "bg-gray-200 text-gray-700 self-start"
+              }`}
+            >
+              {msg.content}
+            </div>
+            <small className="text-gray-500 text-xs">
+              {new Date(msg.timestamp).toLocaleString()}
+            </small>
+          </div>
+        ))}
+      </div>
+      <form onSubmit={handleSendMessage} className="flex gap-2">
+        <input
+          className="border flex-grow rounded p-2"
+          type="text"
+          placeholder="Type your message..."
+          value={newMessage}
+          onChange={(e) => setNewMessage(e.target.value)}
+        />
+        <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded">
+          Send
+        </button>
+      </form>
     </div>
   );
 }
@@ -47947,6 +48353,75 @@ export async function middleware(req: NextRequest) {
 export const config = {
   matcher: ["/dashboard/:path*"]
 };
+```
+
+### /workspaces/aicare/aicare-app/src/models/conversation.ts
+```
+import mongoose, { Schema, Document, Model, Types } from "mongoose";
+
+/**
+ * Subdocument interface for each message in the conversation.
+ * `_id` is optional because MongoDB auto-generates it by default.
+ */
+export interface IMessage {
+  _id?: Types.ObjectId;
+  sender: "user" | "ai";
+  content: string;
+  timestamp: Date;
+}
+
+export interface IConversation extends Document {
+  userId: Types.ObjectId;
+  title: string;
+  messages: IMessage[];
+  attachments: Types.ObjectId[];
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+const ConversationSchema = new Schema<IConversation>(
+  {
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true
+    },
+    title: {
+      type: String,
+      default: "New Conversation"
+    },
+    messages: [
+      {
+        sender: {
+          type: String,
+          enum: ["user", "ai"],
+          required: true
+        },
+        content: {
+          type: String,
+          required: true
+        },
+        timestamp: {
+          type: Date,
+          default: Date.now
+        }
+      }
+    ],
+    attachments: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "MedicalRecord"
+      }
+    ]
+  },
+  { timestamps: true }
+);
+
+const Conversation =
+  (mongoose.models.Conversation as Model<IConversation>) ||
+  mongoose.model<IConversation>("Conversation", ConversationSchema);
+
+export default Conversation;
 ```
 
 ### /workspaces/aicare/aicare-app/src/models/MedicalRecord.ts

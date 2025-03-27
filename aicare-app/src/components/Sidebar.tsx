@@ -1,13 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter, usePathname } from "next/navigation";
 
-interface SidebarProps {
-  setActiveFeature: (feature: string) => void;
-}
-
-export default function Sidebar({ setActiveFeature }: SidebarProps) {
+export default function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const router = useRouter();
+  const pathname = usePathname() || "";
+
+  const navigate = (path: string) => {
+    router.push(path);
+  };
 
   return (
     <aside
@@ -26,38 +29,52 @@ export default function Sidebar({ setActiveFeature }: SidebarProps) {
       {/* Navigation Links */}
       <nav className="space-y-4">
         <button
-          onClick={() => setActiveFeature("dashboard")}
-          className="block p-2 hover:bg-indigo-700 rounded transition w-full text-left"
+          onClick={() => navigate("/dashboard")}
+          className={`block p-2 rounded transition w-full text-left ${
+            pathname === "/dashboard" ? "bg-indigo-700" : "hover:bg-indigo-700"
+          }`}
         >
           🏠 {isCollapsed ? "" : "Dashboard"}
         </button>
         <button
-          onClick={() => setActiveFeature("chatbot")}
-          className="block p-2 hover:bg-indigo-700 rounded transition w-full text-left"
+          onClick={() => navigate("/dashboard/chatbot")}
+          className={`block p-2 rounded transition w-full text-left ${
+            pathname.startsWith("/dashboard/chatbot") ? "bg-indigo-700" : "hover:bg-indigo-700"
+          }`}
         >
           💬 {isCollapsed ? "" : "Chatbot"}
         </button>
         <button
-          onClick={() => setActiveFeature("appointments")}
-          className="block p-2 hover:bg-indigo-700 rounded transition w-full text-left"
+          onClick={() => navigate("/dashboard/appointments")}
+          className={`block p-2 rounded transition w-full text-left ${
+            pathname.startsWith("/dashboard/appointments") ? "bg-indigo-700" : "hover:bg-indigo-700"
+          }`}
         >
           📅 {isCollapsed ? "" : "Appointments"}
         </button>
         <button
-          onClick={() => setActiveFeature("medications")}
-          className="block p-2 hover:bg-indigo-700 rounded transition w-full text-left"
+          onClick={() => navigate("/dashboard/medications")}
+          className={`block p-2 rounded transition w-full text-left ${
+            pathname.startsWith("/dashboard/medications") ? "bg-indigo-700" : "hover:bg-indigo-700"
+          }`}
         >
           💊 {isCollapsed ? "" : "Medications"}
         </button>
         <button
-          onClick={() => setActiveFeature("medicalRecords")}
-          className="block p-2 hover:bg-indigo-700 rounded transition w-full text-left"
+          onClick={() => navigate("/dashboard/medical-records")}
+          className={`block p-2 rounded transition w-full text-left ${
+            pathname.startsWith("/dashboard/medical-records")
+              ? "bg-indigo-700"
+              : "hover:bg-indigo-700"
+          }`}
         >
           📂 {isCollapsed ? "" : "Medical Records"}
         </button>
         <button
-          onClick={() => setActiveFeature("settings")}
-          className="block p-2 hover:bg-indigo-700 rounded transition w-full text-left"
+          onClick={() => navigate("/dashboard/settings")}
+          className={`block p-2 rounded transition w-full text-left ${
+            pathname.startsWith("/dashboard/settings") ? "bg-indigo-700" : "hover:bg-indigo-700"
+          }`}
         >
           ⚙️ {isCollapsed ? "" : "Settings"}
         </button>

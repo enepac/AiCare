@@ -1,11 +1,6 @@
-import mongoose, { Schema, Document, Model, Types } from "mongoose";
+import mongoose, { Schema, Document, Model, Types, models, model } from "mongoose";
 
-/**
- * Subdocument interface for each message in the conversation.
- * `_id` is optional because MongoDB auto-generates it by default.
- */
 export interface IMessage {
-  _id?: Types.ObjectId;
   sender: "user" | "ai";
   content: string;
   timestamp: Date;
@@ -13,53 +8,33 @@ export interface IMessage {
 
 export interface IConversation extends Document {
   userId: Types.ObjectId;
-  title: string;
+  threadId: string;
+  title?: string; // optional if you want to store a title
+  attachments?: Types.ObjectId[]; // optional if you want to store attachments
   messages: IMessage[];
-  attachments: Types.ObjectId[];
   createdAt?: Date;
   updatedAt?: Date;
 }
 
-const ConversationSchema = new Schema<IConversation>(
+const conversationSchema = new Schema<IConversation>(
   {
-    userId: {
-      type: Schema.Types.ObjectId,
-      ref: "User",
-      required: true
-    },
-    title: {
-      type: String,
-      default: "New Conversation"
-    },
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    threadId: { type: String, required: true, unique: true },
+    title: { type: String }, // optional
+    attachments: [{ type: mongoose.Schema.Types.ObjectId, ref: "Attachment" }], // optional
     messages: [
       {
-        sender: {
-          type: String,
-          enum: ["user", "ai"],
-          required: true
-        },
-        content: {
-          type: String,
-          required: true
-        },
-        timestamp: {
-          type: Date,
-          default: Date.now
-        }
-      }
-    ],
-    attachments: [
-      {
-        type: Schema.Types.ObjectId,
-        ref: "MedicalRecord"
+        sender: { type: String, enum: ["user", "ai"], required: true },
+        content: { type: String, required: true },
+        timestamp: { type: Date, default: Date.now }
       }
     ]
   },
   { timestamps: true }
 );
 
-const Conversation =
-  (mongoose.models.Conversation as Model<IConversation>) ||
-  mongoose.model<IConversation>("Conversation", ConversationSchema);
+// Reuse an existing model if it exists, otherwise create a new one
+const Conversation: Model<IConversation> =
+  models.Conversation || model<IConversation>("Conversation", conversationSchema);
 
 export default Conversation;

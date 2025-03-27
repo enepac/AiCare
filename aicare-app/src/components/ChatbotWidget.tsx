@@ -1,70 +1,86 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import io from "socket.io-client";
 
-export default function ChatbotWidget() {
-  const [messages, setMessages] = useState([
-    { id: 1, sender: "bot", text: "Hello! How can I assist you today?" }
-  ]);
+const socket = io(process.env.NEXT_PUBLIC_NEXTAUTH_URL || "http://localhost:4000", {
+  path: "/api/socketio"
+});
+
+export interface ChatbotWidgetProps {
+  threadId?: string;
+}
+
+export default function ChatbotWidget({
+  threadId = "default-thread"
+}: ChatbotWidgetProps): JSX.Element {
+  const [messages, setMessages] = useState<
+    { sender: "user" | "ai"; content: string; timestamp: string }[]
+  >([]);
   const [input, setInput] = useState("");
 
-  const handleSendMessage = () => {
+  useEffect(() => {
+    if (threadId) {
+      socket.emit("join_thread", threadId);
+
+      socket.on(
+        "new_message",
+        (message: { sender: "user" | "ai"; content: string; timestamp: string }) => {
+          setMessages((prevMessages) => [...prevMessages, message]);
+        }
+      );
+
+      fetch(`/api/chatbot/threads/${threadId}`)
+        .then((res) => res.json())
+        .then((data) => setMessages(data.messages));
+
+      return () => {
+        socket.emit("leave_thread", threadId);
+        socket.off("new_message");
+      };
+    }
+  }, [threadId]);
+
+  const sendMessage = async () => {
     if (!input.trim()) return;
 
-    // Add user message to chat
-    const newMessages = [...messages, { id: messages.length + 1, sender: "user", text: input }];
-    setMessages(newMessages);
-    setInput("");
+    await fetch(`/api/chatbot/threads/${threadId}/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: input })
+    });
 
-    // Simulate bot response (replace with API later)
-    setTimeout(() => {
-      setMessages((prevMessages) => [
-        ...prevMessages,
-        {
-          id: prevMessages.length + 1,
-          sender: "bot",
-          text: "I'm analyzing your symptoms..."
-        }
-      ]);
-    }, 1000);
+    setInput("");
   };
 
   return (
-    <section className="bg-white p-6 rounded-lg shadow-md border border-gray-300">
-      <h2 className="text-xl font-semibold text-gray-800 mb-4">AI Chatbot</h2>
-
-      {/* Chat Window */}
-      <div className="h-48 overflow-y-auto border border-gray-300 p-4 bg-gray-100 rounded-lg mb-4">
-        {messages.map((msg) => (
-          <p
-            key={msg.id}
-            className={`p-3 my-1 rounded-md max-w-xs ${
-              msg.sender === "user"
-                ? "bg-blue-500 text-white self-end ml-auto"
-                : "bg-gray-200 text-gray-900 self-start"
-            }`}
-          >
-            {msg.text}
-          </p>
+    <div className="flex flex-col h-full">
+      <div className="flex-1 overflow-auto">
+        {messages.map((msg, idx) => (
+          <div key={idx} className={`p-2 ${msg.sender === "user" ? "text-right" : "text-left"}`}>
+            <div
+              className={`inline-block px-4 py-2 rounded-lg ${
+                msg.sender === "user" ? "bg-blue-500 text-white" : "bg-gray-200 text-gray-800"
+              }`}
+            >
+              {msg.content}
+            </div>
+          </div>
         ))}
       </div>
 
-      {/* Chat Input */}
-      <div className="flex space-x-2">
+      <div className="flex mt-2">
         <input
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Type a message..."
-          className="flex-1 p-2 border border-gray-300 rounded-lg"
+          placeholder="Type your message..."
+          className="flex-1 border border-gray-300 rounded px-3 py-2"
         />
-        <button
-          onClick={handleSendMessage}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition"
-        >
+        <button onClick={sendMessage} className="ml-2 bg-blue-500 text-white rounded px-4">
           Send
         </button>
       </div>
-    </section>
+    </div>
   );
 }

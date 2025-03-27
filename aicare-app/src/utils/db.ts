@@ -17,7 +17,7 @@ export async function dbConnect() {
     cachedPromise = mongoose
       .connect(MONGODB_URI, {
         dbName: "AiCareDB",
-        bufferCommands: false
+        bufferCommands: true
       })
       .then((mongoose) => mongoose.connection);
   }

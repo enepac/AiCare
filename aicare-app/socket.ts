@@ -1,43 +1,46 @@
-// File: /workspaces/aicare/aicare-app/socket.ts
-
 import { Server as HttpServer } from "http";
-import { Server as SocketIOServer } from "socket.io";
+import { Server, Socket } from "socket.io";
 
-let io: SocketIOServer | null = null;
-
-/**
- * Initialize Socket.IO with the given HTTP server
- */
-export function initSocket(server: HttpServer) {
-  io = new SocketIOServer(server, {
-    cors: {
-      origin: "*" // or an array of allowed origins
-    }
-  });
-
-  // Here you can define global event listeners
-  io.on("connection", (socket) => {
-    console.log("Socket connected:", socket.id);
-
-    socket.on("joinConversation", (threadId: string) => {
-      socket.join(`thread_${threadId}`);
-      console.log(`${socket.id} joined room: thread_${threadId}`);
-    });
-
-    socket.on("disconnect", () => {
-      console.log("Socket disconnected:", socket.id);
-    });
-  });
-
-  return io;
+declare global {
+  // eslint-disable-next-line no-var
+  var io: Server | undefined;
 }
 
-/**
- * Retrieve the existing Socket.IO server instance
- */
-export function getIO(): SocketIOServer {
-  if (!io) {
-    throw new Error("Socket.io not initialized!");
+export const initSocket = (server: HttpServer) => {
+  if (!global.io) {
+    global.io = new Server(server, {
+      path: "/api/socketio",
+      cors: {
+        origin: process.env.NEXTAUTH_URL || "http://localhost:4000",
+        methods: ["GET", "POST"]
+      }
+    });
+
+    global.io.on("connection", (socket: Socket) => {
+      console.log(`✅ Socket connected: ${socket.id}`);
+
+      socket.on("join_thread", (threadId: string) => {
+        socket.join(threadId);
+        console.log(`➡️ Joined thread: ${threadId}`);
+      });
+
+      socket.on("leave_thread", (threadId: string) => {
+        socket.leave(threadId);
+        console.log(`⬅️ Left thread: ${threadId}`);
+      });
+
+      socket.on("disconnect", () => {
+        console.log(`❌ Socket disconnected: ${socket.id}`);
+      });
+    });
+
+    console.log("✅ Socket.IO initialized at path /api/socketio");
   }
-  return io;
-}
+};
+
+export const getIO = () => {
+  if (!global.io) {
+    throw new Error("❌ Socket.IO not initialized!");
+  }
+  return global.io;
+};
