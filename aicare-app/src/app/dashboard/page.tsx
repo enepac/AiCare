@@ -9,15 +9,16 @@ import { HTML5Backend } from "react-dnd-html5-backend";
 import DashboardHeader from "@/components/DashboardHeader";
 import PatientProfile from "@/components/PatientProfile";
 import Sidebar from "@/components/Sidebar";
-import HealthSummary from "@/components/HealthSummary";
+// import HealthSummary from "@/components/HealthSummary";
 import AppointmentList from "@/components/AppointmentList";
 import MedicationReminders from "@/components/MedicationReminders";
-import ChatbotWidget from "@/components/ChatbotWidget";
+// import ChatbotWidget from "@/components/ChatbotWidget";
 import DataVisualization from "@/components/DataVisualization";
 import MedicalRecords from "@/components/MedicalRecords";
 import ProfileProgressBar from "@/components/ProfileProgressBar";
 
 import type { UserProfile } from "@/types/UserProfile";
+import ChatbotPage from "@/app/dashboard/chatbot/page";
 
 export default function Dashboard() {
   const { data: session, status } = useSession();
@@ -33,7 +34,10 @@ export default function Dashboard() {
 
   const fetchProfile = async () => {
     try {
+      console.time("fetchProfile");
       const res = await fetch("/api/profile");
+      console.timeEnd("fetchProfile");
+
       if (res.ok) {
         const data: UserProfile = await res.json();
         setProfileData(data);
@@ -121,7 +125,7 @@ export default function Dashboard() {
   return (
     <DndProvider backend={HTML5Backend}>
       <div className="flex h-screen bg-gray-100">
-        <Sidebar setActiveFeature={setActiveFeature} />
+        <Sidebar activeFeature={activeFeature} setActiveFeature={setActiveFeature} />
 
         <div className="flex-1 flex flex-col p-6 space-y-6 overflow-y-auto">
           <DashboardHeader />
@@ -164,14 +168,13 @@ export default function Dashboard() {
               </button>
 
               {saveMessage && <p className="text-sm mt-2 text-green-600">{saveMessage}</p>}
-
-              <HealthSummary />
-              <AppointmentList />
-              <MedicationReminders />
-              <ChatbotWidget />
-              <DataVisualization />
             </>
           )}
+
+          {activeFeature === "chatbot" && <ChatbotPage />}
+          {activeFeature === "appointments" && <AppointmentList />}
+          {activeFeature === "medications" && <MedicationReminders />}
+          {activeFeature === "visualization" && <DataVisualization />}
 
           {activeFeature === "medicalRecords" && (
             <section className="flex-1 bg-white rounded-lg shadow-md overflow-y-auto p-6">

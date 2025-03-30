@@ -1,79 +1,100 @@
-import { NextResponse, NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../../lib/authOptions";
 import User from "@/models/user";
 import { dbConnect } from "@/lib/mongodb";
 
 export async function GET() {
-  await dbConnect();
   const session = await getServerSession(authOptions);
-
-  if (!session || !session.user?.email) {
+  if (!session?.user?.email) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  await dbConnect();
+
   try {
-    const { email } = session.user;
-    const user = await User.findOne({ email });
+    const email = session.user.email;
+
+    const user = await User.findOne(
+      { email },
+      {
+        name: 1,
+        email: 1,
+        age: 1,
+        gender: 1,
+        allergies: 1,
+        medications: 1,
+        familyHistory: 1,
+        activityLevel: 1,
+        diet: 1,
+        height: 1,
+        weight: 1,
+        bmi: 1,
+        bloodType: 1,
+        isPregnant: 1
+      }
+    );
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
+    const {
+      name,
+      age = "",
+      gender = "",
+      allergies = "",
+      medications = "",
+      familyHistory = "",
+      activityLevel = "",
+      diet = "",
+      height = null,
+      weight = null,
+      bmi = null,
+      bloodType = "",
+      isPregnant = false
+    } = user;
+
     const requiredFields = [
       "age",
       "gender",
+      "allergies",
+      "medications",
       "bloodType",
-      "diet",
+      "familyHistory",
       "activityLevel",
+      "diet",
       "height",
       "weight",
       "bmi"
     ];
 
-    const isProfileComplete = requiredFields.every(
-      (field) => user[field] !== "" && user[field] !== null && user[field] !== undefined
-    );
+    const isProfileComplete = requiredFields.every((field) => {
+      const value = user[field as keyof typeof user];
+      return value !== "" && value !== null && value !== undefined;
+    });
 
     return NextResponse.json({
-      name: user.name,
-      email: user.email,
-      age: user.age || "",
-      gender: user.gender || "",
-      allergies: user.allergies || "",
-      medications: user.medications || "",
-      familyHistory: user.familyHistory || "",
-      activityLevel: user.activityLevel || "",
-      diet: user.diet || "",
-      height: user.height || null,
-      weight: user.weight || null,
-      bmi: user.bmi || null,
-      bloodType: user.bloodType || "",
-      isPregnant: user.isPregnant ?? false,
+      name,
+      email,
+      age,
+      gender,
+      allergies,
+      medications,
+      familyHistory,
+      activityLevel,
+      diet,
+      height,
+      weight,
+      bmi,
+      bloodType,
+      isPregnant,
       isProfileComplete
     });
   } catch (error) {
     console.error("❌ Error fetching profile:", error);
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
-  }
-}
+    const errorMessage = error instanceof Error ? error.message : "Server error";
 
-export async function POST(req: NextRequest) {
-  await dbConnect();
-  const session = await getServerSession(authOptions);
-
-  if (!session || !session.user?.email) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  try {
-    const profileUpdates = await req.json();
-
-    await User.updateOne({ email: session.user.email }, { $set: profileUpdates }, { upsert: true });
-
-    return NextResponse.json({ success: true }, { status: 200 });
-  } catch (error) {
-    console.error("❌ Error saving profile:", error);
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

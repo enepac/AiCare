@@ -1,185 +1,247 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
-import io from "socket.io-client";
-import { Pencil, Trash2, Plus, Check } from "lucide-react";
-import axios from "axios";
+import { useEffect, useState, useRef } from "react";
+import { IMessage } from "@/models/conversation";
+import { format } from "date-fns";
+import clsx from "clsx";
+import ReactMarkdown from "react-markdown";
+/* eslint-disable @typescript-eslint/no-unused-vars */
+import { FileIcon, ImageIcon, Loader2, Send, Upload } from "lucide-react";
+import type { ChatThread } from "@/types/chatbot";
 
-const socket = io(process.env.NEXT_PUBLIC_NEXTAUTH_URL || "http://localhost:4000", {
-  path: "/api/socketio"
-});
-
-interface Message {
-  sender: "user" | "ai";
-  content: string;
-  timestamp: string;
-}
-
-export default function ChatbotWidget(): JSX.Element {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const threadId = searchParams?.get("threadId");
-
-  const [messages, setMessages] = useState<Message[]>([]);
+export default function ChatbotWidget({
+  threads,
+  activeThread,
+  setActiveThread,
+  refreshThreads
+}: {
+  threads: ChatThread[];
+  activeThread: ChatThread | null;
+  setActiveThread: (thread: ChatThread | null) => void;
+  refreshThreads: () => Promise<void>;
+}) {
+  const [messages, setMessages] = useState<IMessage[]>([]);
   const [input, setInput] = useState("");
-  const [threadTitle, setThreadTitle] = useState("Untitled Thread");
-  const [isEditing, setIsEditing] = useState(false);
-  const [editedTitle, setEditedTitle] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [deletingThreadId, setDeletingThreadId] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Auto-create a thread if none exists in the URL
   useEffect(() => {
-    if (!threadId) {
-      axios.post("/api/chatbot/new-thread").then((res) => {
-        router.replace(`/dashboard/chatbot?threadId=${res.data.threadId}`);
-      });
-    }
-  }, [threadId, router]);
-
-  // Load thread messages and listen for real-time updates
-  useEffect(() => {
-    if (!threadId) return;
-
-    socket.emit("join_thread", threadId);
-
-    socket.on("new_message", (message: Message) => {
-      setMessages((prevMessages) => [...prevMessages, message]);
-    });
-
-    axios
-      .get(`/api/chatbot/threads/${threadId}`)
-      .then((res) => {
-        setMessages(res.data.messages || []);
-        setThreadTitle(res.data.title || "Untitled Thread");
-        setEditedTitle(res.data.title || "Untitled Thread");
-      })
-      .catch(async (err) => {
-        if (err.response?.status === 404) {
-          const res = await axios.post("/api/chatbot/new-thread", { title: "Default Thread" });
-          router.replace(`/dashboard/chatbot?threadId=${res.data.threadId}`);
-        }
-      });
-
-    return () => {
-      socket.emit("leave_thread", threadId);
-      socket.off("new_message");
+    if (!activeThread) return;
+    const fetchMessages = async () => {
+      try {
+        const res = await fetch(`/api/chatbot/threads/${activeThread.threadId}/messages`, {
+          credentials: "include"
+        });
+        const data = await res.json();
+        console.log("📨 MESSAGES FOR THREAD:", activeThread.threadId, data.messages);
+        setMessages(data.messages || []);
+      } catch (err) {
+        console.error("❌ Error fetching messages:", err);
+      }
     };
-  }, [threadId, router]);
+    fetchMessages();
+  }, [activeThread]);
 
-  const sendMessage = async () => {
-    console.log("💬 Send button clicked");
+  const handleSend = async () => {
+    if (!input.trim() || !activeThread) return;
 
-    if (!input.trim()) {
-      console.warn("⚠️ No message to send.");
-      return;
-    }
+    console.log("📤 Sending message:", input);
 
-    if (!threadId) {
-      console.error("❌ threadId missing.");
-      return;
-    }
+    const userMessage: IMessage = {
+      sender: "user",
+      content: input,
+      timestamp: new Date()
+    };
 
-    console.log("📤 Sending message:", input, "→ threadId:", threadId);
-
-    await fetch(`/api/chatbot/threads/${threadId}/messages`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: input })
-    }).catch((err) => {
-      console.error("❌ Failed to send:", err);
-    });
-
+    setMessages((prev) => [...prev, userMessage]);
     setInput("");
+    setLoading(true);
+
+    try {
+      const res = await fetch(`/api/chatbot/threads/${activeThread.threadId}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ content: input })
+      });
+
+      if (!res.ok) {
+        const err = await res.text();
+        console.error("❌ Failed to get AI response:", res.status, err);
+        setLoading(false);
+        return;
+      }
+
+      const { aiMessage } = await res.json();
+      console.log("📥 Received AI message:", aiMessage);
+
+      if (aiMessage?.content) {
+        setMessages((prev) => [...prev, aiMessage]);
+      }
+
+      if (messages.length === 0 && input.length > 5) {
+        const newTitle = input.slice(0, 60) + (input.length > 60 ? "..." : "");
+        try {
+          await fetch(`/api/chatbot/threads/${activeThread.threadId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ title: newTitle })
+          });
+          await refreshThreads();
+        } catch (err) {
+          console.error("❌ Failed to rename thread:", err);
+        }
+      }
+    } catch (error) {
+      console.error("❌ Error sending message:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleRename = async () => {
-    if (!threadId) return;
-    await axios.patch(`/api/chatbot/threads/${threadId}`, { title: editedTitle });
-    setThreadTitle(editedTitle);
-    setIsEditing(false);
-  };
-
-  const handleDelete = async () => {
-    if (!threadId) return;
-    await axios.delete(`/api/chatbot/threads/${threadId}`);
-    router.replace("/dashboard/chatbot");
-  };
-
-  const handleNewThread = async () => {
-    const { data } = await axios.post("/api/chatbot/new-thread");
-    router.replace(`/dashboard/chatbot?threadId=${data.threadId}`);
-  };
+  if (!threads?.length) return <div className="p-4 text-gray-500">No threads available.</div>;
+  if (!activeThread) return <div className="p-4 text-gray-500">No thread selected.</div>;
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="flex justify-between items-center border-b p-4 bg-white">
-        {isEditing ? (
-          <div className="flex items-center gap-2 w-full">
-            <input
-              value={editedTitle}
-              onChange={(e) => setEditedTitle(e.target.value)}
-              className="border rounded px-2 py-1 flex-1"
-            />
-            <button onClick={handleRename} className="text-green-600 hover:text-green-800">
-              <Check className="h-5 w-5" />
-            </button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold truncate max-w-[200px]">{threadTitle}</h2>
-            <button
-              onClick={() => setIsEditing(true)}
-              className="text-blue-600 hover:text-blue-800"
-            >
-              <Pencil className="h-4 w-4" />
-            </button>
-          </div>
-        )}
-        <div className="flex items-center gap-3">
-          <button onClick={handleNewThread} className="text-indigo-600 hover:text-indigo-800">
-            <Plus className="h-5 w-5" />
-          </button>
-          <button onClick={handleDelete} className="text-red-600 hover:text-red-800">
-            <Trash2 className="h-5 w-5" />
+    <div className="flex w-full h-full border rounded-lg overflow-hidden">
+      {/* Sidebar Thread List */}
+      <div className="w-1/4 border-r p-4 overflow-y-auto">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-semibold">Threads</h2>
+          <button
+            onClick={async () => {
+              const res = await fetch("/api/chatbot/new-thread", {
+                method: "POST",
+                credentials: "include"
+              });
+              const data = await res.json();
+              setActiveThread(data.thread);
+              await refreshThreads();
+            }}
+            className="text-sm text-blue-600"
+          >
+            New Chat
           </button>
         </div>
-      </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-auto px-4 py-2 space-y-2">
-        {messages.map((msg, idx) => (
+        {threads.map((thread) => (
           <div
-            key={idx}
-            className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}
+            key={thread._id}
+            className={clsx(
+              "flex items-center justify-between p-2 cursor-pointer rounded hover:bg-gray-100",
+              activeThread?.threadId === thread.threadId && "bg-blue-100 font-semibold"
+            )}
           >
-            <div
-              className={`max-w-[75%] px-4 py-2 rounded-lg ${
-                msg.sender === "user" ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-800"
-              }`}
-            >
-              {msg.content}
-            </div>
+            {deletingThreadId === thread.threadId ? (
+              <div className="flex items-center justify-between w-full text-sm text-gray-700">
+                <span>Delete this thread?</span>
+                <div className="flex gap-1 ml-2">
+                  <button
+                    className="text-green-600 hover:text-green-800 text-xs"
+                    onClick={async () => {
+                      await fetch(`/api/chatbot/threads/${thread.threadId}`, {
+                        method: "DELETE",
+                        credentials: "include"
+                      });
+
+                      await refreshThreads();
+
+                      const res = await fetch("/api/chatbot/threads", {
+                        credentials: "include"
+                      });
+                      const data = await res.json();
+                      const sorted = (data.threads || []).sort(
+                        (a: ChatThread, b: ChatThread) =>
+                          new Date(b.updatedAt ?? 0).getTime() -
+                          new Date(a.updatedAt ?? 0).getTime()
+                      );
+                      setActiveThread(sorted[0] || null);
+                      setDeletingThreadId(null);
+                    }}
+                  >
+                    ✔
+                  </button>
+                  <button
+                    className="text-gray-600 hover:text-black text-xs"
+                    onClick={() => setDeletingThreadId(null)}
+                  >
+                    ✖
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <span onClick={() => setActiveThread(thread)} className="truncate flex-1">
+                  {thread.title || thread.preview || "Untitled Thread"}
+                </span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDeletingThreadId(thread.threadId);
+                  }}
+                  className="ml-2 text-red-500 hover:text-red-700 text-xs"
+                  title="Delete thread"
+                >
+                  🗑
+                </button>
+              </>
+            )}
           </div>
         ))}
       </div>
 
-      {/* Input */}
-      <div className="flex items-center gap-2 border-t px-4 py-3 bg-white">
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Type your message..."
-          className="flex-1 border border-gray-300 rounded px-3 py-2"
-          onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-        />
-        <button
-          onClick={sendMessage}
-          className="bg-blue-600 text-white rounded px-4 py-2 hover:bg-blue-700"
-        >
-          Send
-        </button>
+      {/* Message Area + Input */}
+      <div className="flex-1 flex flex-col justify-between">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {messages.map((msg, i) => (
+            <div
+              key={i}
+              className={clsx(
+                "flex flex-col max-w-[70%] px-4 py-2 rounded-lg",
+                msg.sender === "user"
+                  ? "bg-blue-100 self-end"
+                  : "bg-gray-100 self-start prose prose-sm max-w-none"
+              )}
+            >
+              {msg.sender === "ai" ? (
+                <ReactMarkdown>{msg.content}</ReactMarkdown>
+              ) : (
+                <span>{msg.content}</span>
+              )}
+              <span className="text-xs text-muted-foreground mt-1">
+                {format(new Date(msg.timestamp), "PPP p")}
+              </span>
+            </div>
+          ))}
+          <div ref={scrollRef} />
+        </div>
+
+        <div className="border-t p-4 flex items-center gap-2">
+          <button className="p-2" title="Upload file (feature next)">
+            <Upload size={18} />
+          </button>
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !loading) {
+                e.preventDefault();
+                handleSend();
+              }
+            }}
+            placeholder="Type your message..."
+            className="flex-1 px-4 py-2 border rounded"
+          />
+          <button
+            onClick={handleSend}
+            disabled={loading}
+            className="p-2 bg-blue-500 hover:bg-blue-600 text-white rounded"
+          >
+            {loading ? <Loader2 className="animate-spin" size={18} /> : <Send size={18} />}
+          </button>
+        </div>
       </div>
     </div>
   );

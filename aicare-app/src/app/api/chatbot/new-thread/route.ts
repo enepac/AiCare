@@ -1,37 +1,29 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import { dbConnect } from "@/lib/mongodb";
+import Conversation from "@/models/conversation";
+import { v4 as uuidv4 } from "uuid";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/authOptions";
-import Conversation from "@/models/conversation";
-import { dbConnect } from "@/utils/db";
-import { nanoid } from "nanoid";
 
-export async function POST(req: NextRequest) {
-  await dbConnect();
-
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  let body: { title?: string } = {};
+export async function POST() {
   try {
-    body = await req.json();
-  } catch {
-    // No body provided — fallback to empty object
+    await dbConnect();
+
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const newThread = await Conversation.create({
+      threadId: uuidv4(),
+      title: "New Conversation",
+      userId: session.user.id,
+      messages: []
+    });
+
+    return NextResponse.json({ thread: newThread }, { status: 201 });
+  } catch (error) {
+    console.error("[POST /chatbot/new-thread]", error);
+    return NextResponse.json({ error: "Failed to create new thread" }, { status: 500 });
   }
-
-  const title = body?.title || "New Conversation";
-  const threadId = nanoid();
-
-  const conversation = await Conversation.create({
-    userId: session.user.id,
-    threadId,
-    title,
-    messages: []
-  });
-
-  return NextResponse.json({
-    threadId: conversation.threadId,
-    title: conversation.title
-  });
 }
