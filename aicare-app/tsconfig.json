@@ -24,8 +24,8 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "preserve",
-    "types": ["next", "next-auth", "jest", "node", "express","socket.io"],
- // ✅ Node.js + NextAuth built-in types
+    "types": ["next", "next-auth", "jest", "node", "express", "socket.io"],
+    // ✅ Node.js + NextAuth built-in types
     "incremental": true,
     "module": "NodeNext",
     "allowSyntheticDefaultImports": true,
@@ -36,8 +36,8 @@
     "require": ["tsconfig-paths/register"] // ✅ For path alias resolution in ts-node
   },
   "include": [
-    "server.ts", 
-    "socket.ts", 
+    "server.ts",
+    "socket.ts",
     "src/**/*",
     "src",
     "src/types/**/*.d.ts",

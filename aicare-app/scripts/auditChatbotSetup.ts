@@ -84,7 +84,7 @@ function checkCriticalFiles() {
 // 4) [Optional] Check live routes if dev server is running
 // Adjust the port if your dev server is on 3000 or 4000.
 async function checkLiveRoutes() {
-  const baseUrl = "http://localhost:4000";
+  const baseUrl = "http://localhost:5000";
   const endpoints = ["/api/chatbot", "/api/chatbot/new-thread", "/api/chatbot/threads"];
 
   console.log("\n--- Checking live endpoints ---");

@@ -11,7 +11,7 @@ export const initSocket = (server: HttpServer) => {
     global.io = new Server(server, {
       path: "/api/socketio",
       cors: {
-        origin: process.env.NEXTAUTH_URL || "http://localhost:4000",
+        origin: process.env.NEXTAUTH_URL || "http://localhost:5000",
         methods: ["GET", "POST"]
       }
     });

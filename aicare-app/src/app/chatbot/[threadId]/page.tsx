@@ -74,7 +74,7 @@ export default function ThreadPage() {
 
   useEffect(() => {
     if (!threadId) return;
-    const socket = io("http://localhost:4000", {
+    const socket = io("http://localhost:5000", {
       transports: ["websocket"]
     });
     socketRef.current = socket;

@@ -49,17 +49,24 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     fs.writeFileSync(fullPath, buffer);
 
-    // 🔍 Extract raw text depending on file type
     let extractedText = "";
 
     if (fileType === "application/pdf") {
+      // @ts-expect-error: legacy path is not exposed in exports field
       const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf");
       const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
 
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const content = await page.getTextContent();
-        const pageText = content.items.map((item: any) => item.str).join(" ");
+        const pageText = content.items
+          .map((item: unknown) => {
+            if (typeof item === "object" && item && "str" in item) {
+              return (item as { str: string }).str;
+            }
+            return "";
+          })
+          .join(" ");
         extractedText += pageText + "\n";
       }
     } else if (["image/jpeg", "image/png"].includes(fileType)) {
@@ -76,7 +83,6 @@ export async function POST(req: NextRequest) {
         });
       });
     } else {
-      // Fallback for .txt, .docx, .html, etc. — try .text() directly
       extractedText = await file.text();
     }
 
@@ -84,8 +90,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Failed to extract meaningful text" }, { status: 400 });
     }
 
-    // 🧠 Send to OpenAI for interpretation
-    const aiRes = await fetch("http://localhost:4000/api/ai/parse", {
+    const aiRes = await fetch("http://localhost:54000/api/ai/parse", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ extractedText })

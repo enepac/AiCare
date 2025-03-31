@@ -3,7 +3,7 @@ import { createServer } from "http";
 import next from "next";
 import { initSocket } from "./socket";
 
-const port = parseInt(process.env.PORT || "4000", 10);
+const port = parseInt(process.env.PORT || "5000", 10);
 const dev = process.env.NODE_ENV !== "production";
 const app = next({ dev });
 const handle = app.getRequestHandler();

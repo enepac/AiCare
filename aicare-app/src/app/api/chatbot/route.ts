@@ -36,8 +36,8 @@ export async function POST(req: NextRequest) {
 
   const promptMessages = [
     {
-      role: "system",
-      content: `You are AiCare, an intelligent medical assistant providing guidance based on patient data. ${userContext}`
+      role: "user",
+      content: `You are a medical assistant. The following is patient-specific and system-wide context pulled from MongoDB. You MUST reference this information to generate every answer. Do not guess. If the answer is not found in the context, say you don't know. ${userContext}`
     },
     ...messages
   ];
