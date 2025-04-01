@@ -32,20 +32,20 @@ export default function ChatbotWidget({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const fetchMessagesForThread = async (threadId: string) => {
+    try {
+      const res = await fetch(`/api/chatbot/threads/${threadId}/messages`, {
+        credentials: "include"
+      });
+      const data = await res.json();
+      setMessages(data.messages || []);
+    } catch (err) {
+      console.error("❌ Error fetching messages:", err);
+    }
+  };
+
   useEffect(() => {
-    if (!activeThread) return;
-    const fetchMessages = async () => {
-      try {
-        const res = await fetch(`/api/chatbot/threads/${activeThread.threadId}/messages`, {
-          credentials: "include"
-        });
-        const data = await res.json();
-        setMessages(data.messages || []);
-      } catch (err) {
-        console.error("❌ Error fetching messages:", err);
-      }
-    };
-    fetchMessages();
+    if (activeThread) fetchMessagesForThread(activeThread.threadId);
   }, [activeThread]);
 
   useEffect(() => {
@@ -87,7 +87,6 @@ export default function ChatbotWidget({
         setMessages((prev) => [...prev, aiMessage]);
       }
 
-      // ✅ Auto-Rename Based on First Message
       if (messages.length <= 1) {
         const firstLine = input.split("\n").find((line) => line.trim().length > 0);
         const newTitle = (firstLine ?? input).slice(0, 60);
@@ -109,7 +108,6 @@ export default function ChatbotWidget({
       setLoading(false);
     }
   };
-
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !activeThread) return;
@@ -132,7 +130,6 @@ export default function ChatbotWidget({
       if (res.ok && data.aiMessage) {
         setMessages((prev) => [...prev, data.aiMessage]);
 
-        // ✅ Auto-Rename Thread from AI Response
         const lines = data.aiMessage.content.split("\n").map((line: string) => line.trim());
         const candidateLine =
           lines.find((line: string) => line.toLowerCase().startsWith("name:")) ||
@@ -161,9 +158,6 @@ export default function ChatbotWidget({
     }
   };
 
-  if (!threads?.length) return <div className="p-4 text-gray-500">No threads available.</div>;
-  if (!activeThread) return <div className="p-4 text-gray-500">No thread selected.</div>;
-
   return (
     <div className="flex w-full h-full border rounded-lg overflow-hidden relative">
       {/* Sidebar */}
@@ -178,6 +172,7 @@ export default function ChatbotWidget({
               });
               const data = await res.json();
               setActiveThread(data.thread);
+              await fetchMessagesForThread(data.thread.threadId);
               await refreshThreads();
             }}
             className="text-sm text-blue-600"
@@ -200,11 +195,41 @@ export default function ChatbotWidget({
             <button
               onClick={async (e) => {
                 e.stopPropagation();
+
                 await fetch(`/api/chatbot/threads/${thread.threadId}`, {
                   method: "DELETE",
                   credentials: "include"
                 });
+
                 await refreshThreads();
+
+                const res = await fetch("/api/chatbot/threads", {
+                  credentials: "include"
+                });
+                const data = await res.json();
+
+                if (!data.threads || data.threads.length === 0) {
+                  const newRes = await fetch("/api/chatbot/new-thread", {
+                    method: "POST",
+                    credentials: "include"
+                  });
+                  const newData = await newRes.json();
+
+                  const msgRes = await fetch(
+                    `/api/chatbot/threads/${newData.thread.threadId}/messages`,
+                    { credentials: "include" }
+                  );
+                  const msgData = await msgRes.json();
+
+                  setMessages(msgData.messages || []);
+                  setActiveThread(newData.thread);
+                } else {
+                  const sorted = data.threads.sort(
+                    (a: ChatThread, b: ChatThread) =>
+                      new Date(b.updatedAt ?? 0).getTime() - new Date(a.updatedAt ?? 0).getTime()
+                  );
+                  setActiveThread(sorted[0]);
+                }
               }}
               className="ml-2 text-red-500 hover:text-red-700 text-xs"
               title="Delete thread"
@@ -220,9 +245,17 @@ export default function ChatbotWidget({
         <div
           className={clsx(
             "flex-1 overflow-y-auto p-4 space-y-4",
-            messages.length === 0 ? "flex items-center justify-center" : ""
+            !activeThread || messages.length === 0
+              ? "flex items-center justify-center text-sm text-gray-500"
+              : ""
           )}
         >
+          {!activeThread ? (
+            <span>Loading new conversation...</span>
+          ) : messages.length === 0 ? (
+            <span>Start chatting to begin the conversation</span>
+          ) : null}
+
           {messages.map((msg, i) => (
             <div
               key={i}
@@ -316,7 +349,6 @@ export default function ChatbotWidget({
         </div>
       </div>
 
-      {/* Toast */}
       {copied && (
         <div className="fixed bottom-4 right-4 bg-black text-white text-sm px-4 py-2 rounded shadow-lg z-50 transition-opacity duration-300">
           ✅ Copied!

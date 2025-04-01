@@ -9,16 +9,15 @@ import { HTML5Backend } from "react-dnd-html5-backend";
 import DashboardHeader from "@/components/DashboardHeader";
 import PatientProfile from "@/components/PatientProfile";
 import Sidebar from "@/components/Sidebar";
-// import HealthSummary from "@/components/HealthSummary";
 import AppointmentList from "@/components/AppointmentList";
 import MedicationReminders from "@/components/MedicationReminders";
-// import ChatbotWidget from "@/components/ChatbotWidget";
 import DataVisualization from "@/components/DataVisualization";
 import MedicalRecords from "@/components/MedicalRecords";
 import ProfileProgressBar from "@/components/ProfileProgressBar";
+import ChatbotWidget from "@/components/ChatbotWidget";
 
 import type { UserProfile } from "@/types/UserProfile";
-import ChatbotPage from "@/app/dashboard/chatbot/page";
+import type { ChatThread } from "@/types/chatbot";
 
 export default function Dashboard() {
   const { data: session, status } = useSession();
@@ -31,6 +30,9 @@ export default function Dashboard() {
   const [profileCompletion, setProfileCompletion] = useState(0);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
+
+  const [threads, setThreads] = useState<ChatThread[]>([]);
+  const [activeThread, setActiveThread] = useState<ChatThread | null>(null);
 
   const fetchProfile = async () => {
     try {
@@ -70,6 +72,34 @@ export default function Dashboard() {
     }
   };
 
+  const loadThreads = async () => {
+    try {
+      const res = await fetch("/api/chatbot/threads", {
+        credentials: "include"
+      });
+      const data = await res.json();
+
+      if (!data.threads || data.threads.length === 0) {
+        const newRes = await fetch("/api/chatbot/new-thread", {
+          method: "POST",
+          credentials: "include"
+        });
+        const newData = await newRes.json();
+        setThreads([newData.thread]);
+        setActiveThread(newData.thread);
+      } else {
+        const sorted = data.threads.sort(
+          (a: ChatThread, b: ChatThread) =>
+            new Date(b.updatedAt ?? 0).getTime() - new Date(a.updatedAt ?? 0).getTime()
+        );
+        setThreads(sorted);
+        setActiveThread(sorted[0]);
+      }
+    } catch (error) {
+      console.error("❌ Error loading threads:", error);
+    }
+  };
+
   useEffect(() => {
     if (status === "loading") return;
 
@@ -79,6 +109,7 @@ export default function Dashboard() {
     }
 
     fetchProfile();
+    loadThreads();
   }, [session, status, router]);
 
   const handleProfileChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -171,7 +202,15 @@ export default function Dashboard() {
             </>
           )}
 
-          {activeFeature === "chatbot" && <ChatbotPage />}
+          {activeFeature === "chatbot" && (
+            <ChatbotWidget
+              threads={threads}
+              activeThread={activeThread}
+              setActiveThread={setActiveThread}
+              refreshThreads={loadThreads}
+            />
+          )}
+
           {activeFeature === "appointments" && <AppointmentList />}
           {activeFeature === "medications" && <MedicationReminders />}
           {activeFeature === "visualization" && <DataVisualization />}
