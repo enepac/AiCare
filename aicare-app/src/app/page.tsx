@@ -67,7 +67,7 @@ export default function LandingPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-r from-cyan-400 via-sky-500 to-blue-600 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-r from-blue-400 via-indigo-500 to-purple-600 p-4">
       <div className="text-center text-white py-8">
         <h1 className="text-4xl font-bold">Welcome to AiCare</h1>
         <p className="text-lg mt-2 max-w-2xl mx-auto">

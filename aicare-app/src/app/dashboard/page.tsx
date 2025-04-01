@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, ChangeEvent } from "react";
+import { useState, useEffect, useRef, ChangeEvent } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { DndProvider } from "react-dnd";
@@ -24,6 +24,7 @@ export default function Dashboard() {
   const router = useRouter();
 
   const [activeFeature, setActiveFeature] = useState<string>("dashboard");
+  const [threads, setThreads] = useState<ChatThread[]>([]);
 
   const [profileData, setProfileData] = useState<UserProfile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
@@ -31,15 +32,17 @@ export default function Dashboard() {
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
 
-  const [threads, setThreads] = useState<ChatThread[]>([]);
   const [activeThread, setActiveThread] = useState<ChatThread | null>(null);
+
+  const chatbotRef = useRef<HTMLDivElement>(null);
+  const dashboardScrollRef = useRef<HTMLDivElement>(null);
+  const scrollToBottomOfDashboard = () => {
+    dashboardScrollRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  };
 
   const fetchProfile = async () => {
     try {
-      console.time("fetchProfile");
       const res = await fetch("/api/profile");
-      console.timeEnd("fetchProfile");
-
       if (res.ok) {
         const data: UserProfile = await res.json();
         setProfileData(data);
@@ -112,6 +115,12 @@ export default function Dashboard() {
     loadThreads();
   }, [session, status, router]);
 
+  useEffect(() => {
+    if (activeFeature === "chatbot" && chatbotRef.current) {
+      chatbotRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [activeFeature]);
+
   const handleProfileChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setProfileData((prev) => prev && { ...prev, [name]: value });
@@ -158,7 +167,7 @@ export default function Dashboard() {
       <div className="flex h-screen bg-gray-100">
         <Sidebar activeFeature={activeFeature} setActiveFeature={setActiveFeature} />
 
-        <div className="flex-1 flex flex-col p-6 space-y-6 overflow-y-auto">
+        <div className="flex-1 flex flex-col p-6 space-y-6 overflow-hidden">
           <DashboardHeader />
 
           {activeFeature === "dashboard" && (
@@ -203,12 +212,16 @@ export default function Dashboard() {
           )}
 
           {activeFeature === "chatbot" && (
-            <ChatbotWidget
-              threads={threads}
-              activeThread={activeThread}
-              setActiveThread={setActiveThread}
-              refreshThreads={loadThreads}
-            />
+            <div ref={chatbotRef} className="flex-1 flex flex-col h-full min-h-0 overflow-hidden">
+              <ChatbotWidget
+                threads={threads}
+                activeThread={activeThread}
+                setActiveThread={setActiveThread}
+                refreshThreads={loadThreads}
+                onNewMessageScroll={scrollToBottomOfDashboard}
+              />
+              <div ref={dashboardScrollRef} />
+            </div>
           )}
 
           {activeFeature === "appointments" && <AppointmentList />}
