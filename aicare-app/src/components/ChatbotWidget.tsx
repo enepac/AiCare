@@ -5,8 +5,7 @@ import { IMessage } from "@/models/conversation";
 import { format } from "date-fns";
 import clsx from "clsx";
 import ReactMarkdown from "react-markdown";
-/* eslint-disable @typescript-eslint/no-unused-vars */
-import { FileIcon, ImageIcon, Loader2, Send, Upload } from "lucide-react";
+import { Loader2, Send, Upload, Pencil, ClipboardCopy } from "lucide-react";
 import type { ChatThread } from "@/types/chatbot";
 
 export default function ChatbotWidget({
@@ -23,8 +22,15 @@ export default function ChatbotWidget({
   const [messages, setMessages] = useState<IMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [deletingThreadId, setDeletingThreadId] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [copied, setCopied] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const showCopyToast = () => {
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   useEffect(() => {
     if (!activeThread) return;
@@ -34,7 +40,6 @@ export default function ChatbotWidget({
           credentials: "include"
         });
         const data = await res.json();
-        console.log("📨 MESSAGES FOR THREAD:", activeThread.threadId, data.messages);
         setMessages(data.messages || []);
       } catch (err) {
         console.error("❌ Error fetching messages:", err);
@@ -43,10 +48,14 @@ export default function ChatbotWidget({
     fetchMessages();
   }, [activeThread]);
 
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
+  }, [messages]);
+
   const handleSend = async () => {
     if (!input.trim() || !activeThread) return;
-
-    console.log("📤 Sending message:", input);
 
     const userMessage: IMessage = {
       sender: "user",
@@ -74,14 +83,14 @@ export default function ChatbotWidget({
       }
 
       const { aiMessage } = await res.json();
-      console.log("📥 Received AI message:", aiMessage);
-
       if (aiMessage?.content) {
         setMessages((prev) => [...prev, aiMessage]);
       }
 
-      if (messages.length === 0 && input.length > 5) {
-        const newTitle = input.slice(0, 60) + (input.length > 60 ? "..." : "");
+      // ✅ Auto-Rename Based on First Message
+      if (messages.length <= 1) {
+        const firstLine = input.split("\n").find((line) => line.trim().length > 0);
+        const newTitle = (firstLine ?? input).slice(0, 60);
         try {
           await fetch(`/api/chatbot/threads/${activeThread.threadId}`, {
             method: "PATCH",
@@ -91,7 +100,7 @@ export default function ChatbotWidget({
           });
           await refreshThreads();
         } catch (err) {
-          console.error("❌ Failed to rename thread:", err);
+          console.error("❌ Failed to auto-rename thread:", err);
         }
       }
     } catch (error) {
@@ -101,12 +110,63 @@ export default function ChatbotWidget({
     }
   };
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeThread) return;
+
+    setUploading(true);
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("threadId", activeThread.threadId);
+
+    try {
+      const res = await fetch(`/api/chatbot/threads/${activeThread.threadId}/upload`, {
+        method: "POST",
+        credentials: "include",
+        body: formData
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.aiMessage) {
+        setMessages((prev) => [...prev, data.aiMessage]);
+
+        // ✅ Auto-Rename Thread from AI Response
+        const lines = data.aiMessage.content.split("\n").map((line: string) => line.trim());
+        const candidateLine =
+          lines.find((line: string) => line.toLowerCase().startsWith("name:")) ||
+          lines.find((line: string) => line.toLowerCase().includes("record") || line.length > 20);
+
+        const title = (candidateLine ?? "Uploaded Record").slice(0, 60);
+
+        try {
+          await fetch(`/api/chatbot/threads/${activeThread.threadId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ title })
+          });
+          await refreshThreads();
+        } catch (err) {
+          console.error("❌ Failed to auto-rename thread from upload:", err);
+        }
+      } else {
+        console.error("❌ Upload failed:", data.message);
+      }
+    } catch (err) {
+      console.error("❌ Upload error:", err);
+    } finally {
+      setUploading(false);
+    }
+  };
+
   if (!threads?.length) return <div className="p-4 text-gray-500">No threads available.</div>;
   if (!activeThread) return <div className="p-4 text-gray-500">No thread selected.</div>;
 
   return (
-    <div className="flex w-full h-full border rounded-lg overflow-hidden">
-      {/* Sidebar Thread List */}
+    <div className="flex w-full h-full border rounded-lg overflow-hidden relative">
+      {/* Sidebar */}
       <div className="w-1/4 border-r p-4 overflow-y-auto">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold">Threads</h2>
@@ -134,81 +194,81 @@ export default function ChatbotWidget({
               activeThread?.threadId === thread.threadId && "bg-blue-100 font-semibold"
             )}
           >
-            {deletingThreadId === thread.threadId ? (
-              <div className="flex items-center justify-between w-full text-sm text-gray-700">
-                <span>Delete this thread?</span>
-                <div className="flex gap-1 ml-2">
-                  <button
-                    className="text-green-600 hover:text-green-800 text-xs"
-                    onClick={async () => {
-                      await fetch(`/api/chatbot/threads/${thread.threadId}`, {
-                        method: "DELETE",
-                        credentials: "include"
-                      });
-
-                      await refreshThreads();
-
-                      const res = await fetch("/api/chatbot/threads", {
-                        credentials: "include"
-                      });
-                      const data = await res.json();
-                      const sorted = (data.threads || []).sort(
-                        (a: ChatThread, b: ChatThread) =>
-                          new Date(b.updatedAt ?? 0).getTime() -
-                          new Date(a.updatedAt ?? 0).getTime()
-                      );
-                      setActiveThread(sorted[0] || null);
-                      setDeletingThreadId(null);
-                    }}
-                  >
-                    ✔
-                  </button>
-                  <button
-                    className="text-gray-600 hover:text-black text-xs"
-                    onClick={() => setDeletingThreadId(null)}
-                  >
-                    ✖
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <>
-                <span onClick={() => setActiveThread(thread)} className="truncate flex-1">
-                  {thread.title || thread.preview || "Untitled Thread"}
-                </span>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setDeletingThreadId(thread.threadId);
-                  }}
-                  className="ml-2 text-red-500 hover:text-red-700 text-xs"
-                  title="Delete thread"
-                >
-                  🗑
-                </button>
-              </>
-            )}
+            <span onClick={() => setActiveThread(thread)} className="truncate flex-1">
+              {thread.title || thread.preview || "Untitled Thread"}
+            </span>
+            <button
+              onClick={async (e) => {
+                e.stopPropagation();
+                await fetch(`/api/chatbot/threads/${thread.threadId}`, {
+                  method: "DELETE",
+                  credentials: "include"
+                });
+                await refreshThreads();
+              }}
+              className="ml-2 text-red-500 hover:text-red-700 text-xs"
+              title="Delete thread"
+            >
+              🗑
+            </button>
           </div>
         ))}
       </div>
 
-      {/* Message Area + Input */}
-      <div className="flex-1 flex flex-col justify-between">
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col">
+        <div
+          className={clsx(
+            "flex-1 overflow-y-auto p-4 space-y-4",
+            messages.length === 0 ? "flex items-center justify-center" : ""
+          )}
+        >
           {messages.map((msg, i) => (
             <div
               key={i}
               className={clsx(
-                "flex flex-col max-w-[70%] px-4 py-2 rounded-lg",
+                "relative flex flex-col max-w-[70%] px-4 py-2 rounded-lg",
                 msg.sender === "user"
                   ? "bg-blue-100 self-end"
                   : "bg-gray-100 self-start prose prose-sm max-w-none"
               )}
             >
               {msg.sender === "ai" ? (
-                <ReactMarkdown>{msg.content}</ReactMarkdown>
+                <div className="relative rounded-2xl p-4 bg-gradient-to-br from-gray-50 to-white border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+                  <ReactMarkdown
+                    components={{
+                      p: (props) => (
+                        <p
+                          className="whitespace-pre-wrap mb-2 text-gray-800 leading-relaxed"
+                          {...props}
+                        />
+                      )
+                    }}
+                  >
+                    {msg.content}
+                  </ReactMarkdown>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(msg.content);
+                      showCopyToast();
+                    }}
+                    className="absolute bottom-2 right-2 text-gray-500 hover:text-gray-800"
+                    title="Copy to clipboard"
+                  >
+                    <ClipboardCopy size={16} />
+                  </button>
+                </div>
               ) : (
-                <span>{msg.content}</span>
+                <>
+                  <span>{msg.content}</span>
+                  <button
+                    onClick={() => setInput(msg.content)}
+                    className="absolute bottom-1 right-2 text-blue-500 hover:text-blue-700"
+                    title="Edit & Resend"
+                  >
+                    <Pencil size={16} />
+                  </button>
+                </>
               )}
               <span className="text-xs text-muted-foreground mt-1">
                 {format(new Date(msg.timestamp), "PPP p")}
@@ -219,8 +279,20 @@ export default function ChatbotWidget({
         </div>
 
         <div className="border-t p-4 flex items-center gap-2">
-          <button className="p-2" title="Upload file (feature next)">
-            <Upload size={18} />
+          <input
+            type="file"
+            accept="application/pdf,image/*"
+            onChange={handleFileUpload}
+            ref={fileInputRef}
+            className="hidden"
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="p-2 rounded hover:bg-gray-100"
+            title="Upload PDF/Image"
+          >
+            {uploading ? <Loader2 className="animate-spin" size={18} /> : <Upload size={18} />}
           </button>
           <input
             value={input}
@@ -243,6 +315,13 @@ export default function ChatbotWidget({
           </button>
         </div>
       </div>
+
+      {/* Toast */}
+      {copied && (
+        <div className="fixed bottom-4 right-4 bg-black text-white text-sm px-4 py-2 rounded shadow-lg z-50 transition-opacity duration-300">
+          ✅ Copied!
+        </div>
+      )}
     </div>
   );
 }
