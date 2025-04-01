@@ -15,8 +15,17 @@ export async function parseRtfWithDocling(buffer: Buffer): Promise<string> {
     return (result.doclingMarkdown as string) || "";
   } catch (error) {
     console.error("❌ Docling parsing error explicitly:", error);
-    throw new Error(`Docling RTF parsing explicitly failed: ${error.message || error}`);
+
+    if (error instanceof Error) {
+      throw new Error(`Docling RTF parsing explicitly failed: ${error.message}`);
+    }
+
+    throw new Error("Docling RTF parsing explicitly failed with unknown error.");
   } finally {
-    fs.unlinkSync(tempFilePath); // Cleanup temp file explicitly
+    try {
+      fs.unlinkSync(tempFilePath); // Cleanup temp file explicitly
+    } catch (cleanupError) {
+      console.warn("⚠️ Failed to clean up temp RTF file:", cleanupError);
+    }
   }
 }

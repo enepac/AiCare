@@ -24,12 +24,14 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "preserve",
-    "types": ["next", "next-auth", "jest", "node", "express", "socket.io"],
+    // "types": ["next", "next-auth", "jest", "node", "express", "socket.io"],
+    "types": ["node", "jest"],
     // ✅ Node.js + NextAuth built-in types
     "incremental": true,
     "module": "NodeNext",
     "allowSyntheticDefaultImports": true,
     "strictNullChecks": true,
+    "typeRoots": ["./types", "./node_modules/@types"],
     "plugins": [{ "name": "next" }]
   },
   "ts-node": {
@@ -40,6 +42,7 @@
     "socket.ts",
     "src/**/*",
     "src",
+    "types",
     "src/types/**/*.d.ts",
     "src/**/*.ts",
     "src/**/*.tsx",

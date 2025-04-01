@@ -6,6 +6,8 @@ import {
   BlockType
 } from "@aws-sdk/client-textract";
 
+import { parseDocumentWithBasicTextract } from "./textractFallback";
+
 const textractClient = new TextractClient({ region: "us-east-2" });
 
 function extractTextFromBlocks(textractData: AnalyzeDocumentCommandOutput): string {
@@ -24,7 +26,7 @@ export async function parseDocumentWithTextract(s3Bucket: string, documentName: 
         Name: documentName
       }
     },
-    FeatureTypes: [FeatureType.FORMS, FeatureType.TABLES] // ✅ Fixed to use correct enum values
+    FeatureTypes: [FeatureType.FORMS, FeatureType.TABLES]
   };
 
   try {
@@ -34,8 +36,16 @@ export async function parseDocumentWithTextract(s3Bucket: string, documentName: 
     const extractedText = extractTextFromBlocks(response);
 
     return { extractedText };
-  } catch (error) {
-    console.error("Textract Parsing Error:", error);
-    throw error;
+  } catch (error: unknown) {
+    console.warn("⚠️ Textract AnalyzeDocument failed. Attempting basic OCR fallback...");
+
+    if (error instanceof Error) {
+      console.error("🛑 Error details:", error.message);
+    } else {
+      console.error("🛑 Non-standard error thrown:", error);
+    }
+
+    const fallback = await parseDocumentWithBasicTextract(s3Bucket, documentName);
+    return fallback;
   }
 }

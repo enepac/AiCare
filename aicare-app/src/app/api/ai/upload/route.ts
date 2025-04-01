@@ -120,6 +120,6 @@ export async function POST(req: NextRequest) {
   }
 }
 
-export const config = {
-  api: { bodyParser: false }
-};
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+export const preferredRegion = "auto";

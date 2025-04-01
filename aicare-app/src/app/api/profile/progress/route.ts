@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "../../../../lib/authOptions";
+import { authOptions } from "@/lib/authOptions";
 import User from "@/models/user";
 import { dbConnect } from "@/lib/mongodb";
 
@@ -22,7 +22,6 @@ export async function GET() {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // List of profile fields that should be filled
     const requiredFields = [
       "age",
       "gender",
@@ -33,18 +32,21 @@ export async function GET() {
       "diet"
     ];
 
-    // Identify missing fields
-    const missingFields = requiredFields.filter((field) => !user[field] || user[field] === "");
+    // 👇 Fix: explicitly cast via `unknown` first
+    const userObj = user.toObject() as unknown as Record<string, unknown>;
+
+    const missingFields = requiredFields.filter(
+      (field) => !userObj[field] || userObj[field] === ""
+    );
 
     console.log("🔍 Missing profile fields:", missingFields);
 
-    // Calculate completion percentage
     const completedFields = requiredFields.length - missingFields.length;
     const completionPercentage = Math.round((completedFields / requiredFields.length) * 100);
 
     return NextResponse.json({
-      completedSteps: Object.keys(user.toObject()).filter(
-        (key) => requiredFields.includes(key) && user[key] !== "" && user[key] !== null
+      completedSteps: requiredFields.filter(
+        (field) => userObj[field] !== "" && userObj[field] !== null
       ),
       missingFields,
       completionPercentage

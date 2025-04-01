@@ -9,7 +9,10 @@ interface MedicalRecord {
   fileType: string;
   uploadDate: string;
   filePath: string;
+  userEmail?: string;
+  __v?: number;
   parsedAI?: Record<string, unknown>;
+  [key: string]: unknown;
 }
 
 export default function MedicalRecords() {
@@ -40,20 +43,18 @@ export default function MedicalRecords() {
       if (!res.ok) throw new Error("Failed to fetch records");
       const data = await res.json();
 
-      // ✅ Map dynamic schema directly to parsedAI for frontend compatibility
-      // ✅ Corrected dynamic schema mapping
-      const records = data.records.map((record) => {
-        const { _id, userEmail, fileName, fileType, uploadDate, filePath, __v, ...parsedAIFields } =
+      const records: MedicalRecord[] = data.records.map((record: Record<string, unknown>) => {
+        const { _id, userEmail, fileName, fileType, uploadDate, filePath, ...parsedAIFields } =
           record;
 
         return {
-          _id,
-          userEmail,
-          fileName,
-          fileType,
-          uploadDate,
-          filePath,
-          parsedAI: parsedAIFields // explicitly fix to directly pass dynamic fields
+          _id: _id as string,
+          userEmail: userEmail as string,
+          fileName: fileName as string,
+          fileType: fileType as string,
+          uploadDate: uploadDate as string,
+          filePath: filePath as string,
+          parsedAI: parsedAIFields
         };
       });
 
@@ -218,30 +219,13 @@ export default function MedicalRecords() {
                   Download
                 </a>
 
-                {Object.keys(record).length > 0 ? (
+                {record.parsedAI && Object.keys(record.parsedAI).length > 0 ? (
                   <details className="mt-2 bg-green-50 border border-green-400 rounded p-2">
                     <summary className="cursor-pointer font-semibold text-green-800">
                       🧠 AI Insights
                     </summary>
                     <pre className="text-sm text-gray-700 whitespace-pre-wrap mt-2">
-                      {JSON.stringify(
-                        Object.fromEntries(
-                          Object.entries(record).filter(
-                            ([key]) =>
-                              ![
-                                "_id",
-                                "userEmail",
-                                "fileName",
-                                "fileType",
-                                "uploadDate",
-                                "filePath",
-                                "__v"
-                              ].includes(key)
-                          )
-                        ),
-                        null,
-                        2
-                      )}
+                      {JSON.stringify(record.parsedAI, null, 2)}
                     </pre>
                   </details>
                 ) : (
