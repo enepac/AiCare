@@ -4,6 +4,8 @@ import { authOptions } from "../../../lib/authOptions";
 import User from "@/models/user";
 import { dbConnect } from "@/lib/mongodb";
 
+import SharedAccess from "@/models/SharedAccess";
+
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) {
@@ -13,7 +15,18 @@ export async function GET() {
   await dbConnect();
 
   try {
-    const email = session.user.email;
+    let email = session.user.email;
+
+    // ✅ Check if user is a viewer with accepted access
+    const access = await SharedAccess.findOne({
+      viewerEmail: email,
+      status: "accepted"
+    });
+
+    if (access) {
+      console.log(`👁️ Shared viewer detected: ${email} viewing ${access.patientEmail}`);
+      email = access.patientEmail;
+    }
 
     const user = await User.findOne(
       { email },
@@ -94,7 +107,6 @@ export async function GET() {
   } catch (error) {
     console.error("❌ Error fetching profile:", error);
     const errorMessage = error instanceof Error ? error.message : "Server error";
-
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

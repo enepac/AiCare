@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 import { format } from "date-fns";
 import clsx from "clsx";
 
@@ -18,8 +19,10 @@ interface MedicalHistoryEntry {
 }
 
 export default function MedicalHistory() {
+  const { data: session } = useSession();
   const [entries, setEntries] = useState<MedicalHistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isViewer, setIsViewer] = useState(false);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState<Partial<MedicalHistoryEntry>>({
@@ -32,6 +35,11 @@ export default function MedicalHistory() {
       const res = await fetch("/api/patient-data/history");
       const data = await res.json();
       setEntries(data);
+
+      // Determine viewer mode using first record
+      if (data.length > 0 && session?.user?.email && data[0].userEmail !== session.user.email) {
+        setIsViewer(true);
+      }
     } catch (err) {
       console.error("❌ Failed to fetch history:", err);
     } finally {
@@ -41,16 +49,19 @@ export default function MedicalHistory() {
 
   useEffect(() => {
     fetchEntries();
-  }, []);
+  }, [session]);
 
   const handleFormChange = (
     field: keyof MedicalHistoryEntry,
     value: string | Date | EntryType | EntryStatus | undefined
   ) => {
+    if (isViewer) return;
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleSubmit = async () => {
+    if (isViewer) return;
+
     const isEdit = !!form._id;
     const res = await fetch("/api/patient-data/history", {
       method: isEdit ? "PUT" : "POST",
@@ -68,6 +79,8 @@ export default function MedicalHistory() {
   };
 
   const handleDelete = async (id: string) => {
+    if (isViewer) return;
+
     const res = await fetch(`/api/patient-data/history?id=${id}`, { method: "DELETE" });
     if (res.ok) fetchEntries();
   };
@@ -75,13 +88,22 @@ export default function MedicalHistory() {
     <div className="space-y-6 max-w-3xl mx-auto">
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-semibold">Medical History</h2>
-        <button
-          onClick={() => setModalOpen(true)}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-        >
-          + Add Entry
-        </button>
+
+        {!isViewer && (
+          <button
+            onClick={() => setModalOpen(true)}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            + Add Entry
+          </button>
+        )}
       </div>
+
+      {isViewer && (
+        <div className="bg-blue-100 border border-blue-300 text-blue-700 p-3 rounded text-sm">
+          👁️ You are viewing shared medical history. Editing is disabled.
+        </div>
+      )}
 
       {loading ? (
         <p>Loading...</p>
@@ -113,30 +135,32 @@ export default function MedicalHistory() {
                   </p>
                 )}
               </div>
-              <div className="flex gap-2 mt-1">
-                <button
-                  onClick={() => {
-                    setForm(entry);
-                    setModalOpen(true);
-                  }}
-                  className="text-sm text-blue-600 hover:underline"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => entry._id && handleDelete(entry._id)}
-                  className="text-sm text-red-600 hover:underline"
-                >
-                  Delete
-                </button>
-              </div>
+              {!isViewer && (
+                <div className="flex gap-2 mt-1">
+                  <button
+                    onClick={() => {
+                      setForm(entry);
+                      setModalOpen(true);
+                    }}
+                    className="text-sm text-blue-600 hover:underline"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => entry._id && handleDelete(entry._id)}
+                    className="text-sm text-red-600 hover:underline"
+                  >
+                    Delete
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>
       )}
 
       {/* Modal */}
-      {modalOpen && (
+      {modalOpen && !isViewer && (
         <div className="fixed inset-0 bg-black bg-opacity-30 z-50 flex items-center justify-center">
           <div className="bg-white p-6 rounded shadow-lg max-w-md w-full space-y-4">
             <h3 className="text-lg font-semibold">

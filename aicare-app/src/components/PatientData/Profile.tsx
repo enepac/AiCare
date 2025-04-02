@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 
 interface UserProfile {
   name: string;
@@ -21,10 +22,12 @@ interface UserProfile {
 }
 
 export default function Profile() {
+  const { data: session } = useSession();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
+  const [isViewer, setIsViewer] = useState(false);
 
   const fetchProfile = async () => {
     try {
@@ -32,6 +35,10 @@ export default function Profile() {
       if (!res.ok) throw new Error("Failed to fetch profile");
       const data: UserProfile = await res.json();
       setProfile(data);
+
+      if (session?.user?.email && session.user.email !== data.email) {
+        setIsViewer(true);
+      }
     } catch (err) {
       console.error("❌ Error fetching profile:", err);
     } finally {
@@ -41,14 +48,15 @@ export default function Profile() {
 
   useEffect(() => {
     fetchProfile();
-  }, []);
+  }, [session]);
 
   const handleChange = (field: keyof UserProfile, value: string | number | boolean | undefined) => {
+    if (isViewer) return;
     setProfile((prev) => (prev ? { ...prev, [field]: value } : prev));
   };
 
   const handleSave = async () => {
-    if (!profile) return;
+    if (!profile || isViewer) return;
     setSaving(true);
     setSaveMessage("");
     try {
@@ -66,12 +74,18 @@ export default function Profile() {
       setSaving(false);
     }
   };
+
   if (loading) return <p>Loading profile...</p>;
   if (!profile) return <p>Could not load profile.</p>;
-
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
-      <h2 className="text-xl font-semibold text-gray-800">Edit Patient Profile</h2>
+      <h2 className="text-xl font-semibold text-gray-800">Patient Profile</h2>
+
+      {isViewer && (
+        <div className="bg-blue-100 border border-blue-300 text-blue-700 p-3 rounded-md text-sm">
+          👁️ You are viewing shared patient data. Editing is disabled.
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <input
@@ -80,6 +94,7 @@ export default function Profile() {
           value={profile.name}
           onChange={(e) => handleChange("name", e.target.value)}
           className="border p-2 rounded w-full"
+          disabled={isViewer}
         />
 
         <input
@@ -88,12 +103,14 @@ export default function Profile() {
           value={profile.age ?? ""}
           onChange={(e) => handleChange("age", Number(e.target.value))}
           className="border p-2 rounded w-full"
+          disabled={isViewer}
         />
 
         <select
           value={profile.gender ?? ""}
           onChange={(e) => handleChange("gender", e.target.value)}
           className="border p-2 rounded w-full"
+          disabled={isViewer}
         >
           <option value="">Select Gender</option>
           <option value="Male">Male</option>
@@ -107,6 +124,7 @@ export default function Profile() {
           value={profile.height ?? ""}
           onChange={(e) => handleChange("height", Number(e.target.value))}
           className="border p-2 rounded w-full"
+          disabled={isViewer}
         />
 
         <input
@@ -115,6 +133,7 @@ export default function Profile() {
           value={profile.weight ?? ""}
           onChange={(e) => handleChange("weight", Number(e.target.value))}
           className="border p-2 rounded w-full"
+          disabled={isViewer}
         />
 
         <input
@@ -123,6 +142,7 @@ export default function Profile() {
           value={profile.bloodType ?? ""}
           onChange={(e) => handleChange("bloodType", e.target.value)}
           className="border p-2 rounded w-full"
+          disabled={isViewer}
         />
 
         <input
@@ -131,6 +151,7 @@ export default function Profile() {
           value={profile.allergies ?? ""}
           onChange={(e) => handleChange("allergies", e.target.value)}
           className="border p-2 rounded w-full"
+          disabled={isViewer}
         />
 
         <input
@@ -139,6 +160,7 @@ export default function Profile() {
           value={profile.medications ?? ""}
           onChange={(e) => handleChange("medications", e.target.value)}
           className="border p-2 rounded w-full"
+          disabled={isViewer}
         />
 
         <input
@@ -147,6 +169,7 @@ export default function Profile() {
           value={profile.familyHistory ?? ""}
           onChange={(e) => handleChange("familyHistory", e.target.value)}
           className="border p-2 rounded w-full"
+          disabled={isViewer}
         />
 
         <input
@@ -155,6 +178,7 @@ export default function Profile() {
           value={profile.activityLevel ?? ""}
           onChange={(e) => handleChange("activityLevel", e.target.value)}
           className="border p-2 rounded w-full"
+          disabled={isViewer}
         />
 
         <input
@@ -163,6 +187,7 @@ export default function Profile() {
           value={profile.diet ?? ""}
           onChange={(e) => handleChange("diet", e.target.value)}
           className="border p-2 rounded w-full"
+          disabled={isViewer}
         />
 
         {/* Pregnancy Toggle */}
@@ -173,6 +198,7 @@ export default function Profile() {
                 type="checkbox"
                 checked={profile.isPregnant ?? false}
                 onChange={(e) => handleChange("isPregnant", e.target.checked)}
+                disabled={isViewer}
               />
               Pregnant?
             </label>
@@ -183,6 +209,7 @@ export default function Profile() {
                 value={profile.expectedDeliveryDate ?? ""}
                 onChange={(e) => handleChange("expectedDeliveryDate", e.target.value)}
                 className="border p-2 rounded w-full"
+                disabled={isViewer}
               />
             )}
           </div>
@@ -192,7 +219,7 @@ export default function Profile() {
       <div className="flex gap-4 items-center">
         <button
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || isViewer}
           className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
         >
           {saving ? "Saving..." : "Save Profile"}

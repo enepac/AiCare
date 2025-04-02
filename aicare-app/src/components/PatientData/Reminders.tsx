@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 
 type ReminderItem = {
   _id: string;
@@ -15,6 +16,7 @@ type Med = {
   _id: string;
   name: string;
   startDate: string;
+  userEmail?: string;
   reminder?: { enabled?: boolean; times?: string[] };
 };
 
@@ -23,6 +25,7 @@ type Appt = {
   type: string;
   appointmentDate: string;
   appointmentTime?: string;
+  userEmail?: string;
   reminder?: { enabled?: boolean };
 };
 
@@ -31,12 +34,16 @@ type Proc = {
   procedureName: string;
   date: string;
   time?: string;
+  userEmail?: string;
   reminder?: { enabled?: boolean };
 };
 
 export default function Reminders() {
+  const { data: session } = useSession();
+
   const [reminders, setReminders] = useState<ReminderItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isViewer, setIsViewer] = useState(false);
 
   const fetchReminders = async () => {
     try {
@@ -45,6 +52,12 @@ export default function Reminders() {
         fetch("/api/patient-data/appointments").then((res) => res.json()),
         fetch("/api/patient-data/procedures").then((res) => res.json())
       ]);
+
+      // Detect if viewer
+      const ownerEmail = meds[0]?.userEmail || appts[0]?.userEmail || procs[0]?.userEmail;
+      if (ownerEmail && session?.user?.email && session.user.email !== ownerEmail) {
+        setIsViewer(true);
+      }
 
       const medsReminders = meds
         .filter((m) => m.reminder?.enabled)
@@ -89,8 +102,11 @@ export default function Reminders() {
 
   useEffect(() => {
     fetchReminders();
-  }, []);
+  }, [session]);
+
   const disableReminder = async (id: string, source: string) => {
+    if (isViewer) return;
+
     const res = await fetch(`/api/patient-data/${source}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -109,6 +125,12 @@ export default function Reminders() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <h2 className="text-xl font-semibold text-gray-800">Reminders</h2>
+
+      {isViewer && (
+        <div className="bg-blue-100 border border-blue-300 text-blue-700 p-3 rounded text-sm">
+          👁️ You are viewing shared reminders. Editing is disabled.
+        </div>
+      )}
 
       {loading ? (
         <p className="text-gray-500">Loading reminders...</p>
@@ -133,12 +155,14 @@ export default function Reminders() {
                   </p>
                 </div>
 
-                <button
-                  onClick={() => disableReminder(rem._id, rem.source)}
-                  className="text-sm text-red-600 hover:underline"
-                >
-                  Disable
-                </button>
+                {!isViewer && (
+                  <button
+                    onClick={() => disableReminder(rem._id, rem.source)}
+                    className="text-sm text-red-600 hover:underline"
+                  >
+                    Disable
+                  </button>
+                )}
               </div>
             ))}
         </div>

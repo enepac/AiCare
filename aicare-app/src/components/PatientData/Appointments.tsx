@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 import { format } from "date-fns";
 
 type Appointment = {
   _id?: string;
+  userEmail?: string;
   type: string;
   location: string;
   purpose?: string;
@@ -21,8 +23,10 @@ type Appointment = {
 };
 
 export default function Appointments() {
+  const { data: session } = useSession();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isViewer, setIsViewer] = useState(false);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState<Partial<Appointment>>({
@@ -38,6 +42,10 @@ export default function Appointments() {
       const res = await fetch("/api/patient-data/appointments");
       const data = await res.json();
       setAppointments(data);
+
+      if (data.length > 0 && session?.user?.email && data[0].userEmail !== session.user.email) {
+        setIsViewer(true);
+      }
     } catch (err) {
       console.error("❌ Failed to load appointments:", err);
     } finally {
@@ -47,15 +55,19 @@ export default function Appointments() {
 
   useEffect(() => {
     fetchAppointments();
-  }, []);
+  }, [session]);
 
   const handleFormChange = (
     field: keyof Appointment,
-    value: string | boolean | string[] | undefined
+    value: string | boolean | string[] | { enabled: boolean; notifyAt?: string[] } | undefined
   ) => {
+    if (isViewer) return;
     setForm((prev) => ({ ...prev, [field]: value }));
   };
+
   const handleSubmit = async () => {
+    if (isViewer) return;
+
     const isEdit = !!form._id;
     const res = await fetch("/api/patient-data/appointments", {
       method: isEdit ? "PUT" : "POST",
@@ -77,23 +89,32 @@ export default function Appointments() {
   };
 
   const handleDelete = async (_id: string) => {
+    if (isViewer) return;
+
     const res = await fetch(`/api/patient-data/appointments?id=${_id}`, {
       method: "DELETE"
     });
     if (res.ok) fetchAppointments();
   };
-
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-semibold text-gray-800">Appointments</h2>
-        <button
-          onClick={() => setModalOpen(true)}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-        >
-          + Add Appointment
-        </button>
+        {!isViewer && (
+          <button
+            onClick={() => setModalOpen(true)}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            + Add Appointment
+          </button>
+        )}
       </div>
+
+      {isViewer && (
+        <div className="bg-blue-100 border border-blue-300 text-blue-700 p-3 rounded text-sm">
+          👁️ You are viewing shared appointments. Editing is disabled.
+        </div>
+      )}
 
       {loading ? (
         <p className="text-gray-500">Loading...</p>
@@ -128,23 +149,25 @@ export default function Appointments() {
                 </span>
               </div>
 
-              <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    setForm(appt);
-                    setModalOpen(true);
-                  }}
-                  className="text-sm text-blue-600 hover:underline"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => appt._id && handleDelete(appt._id)}
-                  className="text-sm text-red-600 hover:underline"
-                >
-                  Delete
-                </button>
-              </div>
+              {!isViewer && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      setForm(appt);
+                      setModalOpen(true);
+                    }}
+                    className="text-sm text-blue-600 hover:underline"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => appt._id && handleDelete(appt._id)}
+                    className="text-sm text-red-600 hover:underline"
+                  >
+                    Delete
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -163,6 +186,7 @@ export default function Appointments() {
               value={form.type ?? ""}
               onChange={(e) => handleFormChange("type", e.target.value)}
               className="border p-2 rounded w-full"
+              disabled={isViewer}
             />
 
             <input
@@ -171,6 +195,7 @@ export default function Appointments() {
               value={form.location ?? ""}
               onChange={(e) => handleFormChange("location", e.target.value)}
               className="border p-2 rounded w-full"
+              disabled={isViewer}
             />
 
             <input
@@ -179,6 +204,7 @@ export default function Appointments() {
               value={form.purpose ?? ""}
               onChange={(e) => handleFormChange("purpose", e.target.value)}
               className="border p-2 rounded w-full"
+              disabled={isViewer}
             />
 
             <div className="flex gap-2">
@@ -187,12 +213,14 @@ export default function Appointments() {
                 value={form.appointmentDate ?? ""}
                 onChange={(e) => handleFormChange("appointmentDate", e.target.value)}
                 className="border p-2 rounded w-1/2"
+                disabled={isViewer}
               />
               <input
                 type="time"
                 value={form.appointmentTime ?? ""}
                 onChange={(e) => handleFormChange("appointmentTime", e.target.value)}
                 className="border p-2 rounded w-1/2"
+                disabled={isViewer}
               />
             </div>
 
@@ -201,14 +229,12 @@ export default function Appointments() {
                 type="checkbox"
                 checked={form.reminder?.enabled ?? false}
                 onChange={() =>
-                  setForm((prev) => ({
-                    ...prev,
-                    reminder: {
-                      enabled: !prev.reminder?.enabled,
-                      notifyAt: prev.reminder?.enabled ? [] : [new Date().toISOString()]
-                    }
-                  }))
+                  handleFormChange("reminder", {
+                    enabled: !form.reminder?.enabled,
+                    notifyAt: form.reminder?.enabled ? [] : [new Date().toISOString()]
+                  })
                 }
+                disabled={isViewer}
               />
               Enable Reminder
             </label>
@@ -218,12 +244,14 @@ export default function Appointments() {
               value={form.notes ?? ""}
               onChange={(e) => handleFormChange("notes", e.target.value)}
               className="border p-2 rounded w-full"
+              disabled={isViewer}
             />
 
             <select
               value={form.status}
               onChange={(e) => handleFormChange("status", e.target.value)}
               className="border p-2 rounded w-full"
+              disabled={isViewer}
             >
               <option value="upcoming">Upcoming</option>
               <option value="completed">Completed</option>
@@ -244,14 +272,17 @@ export default function Appointments() {
                 }}
                 className="px-4 py-2 border rounded"
               >
-                Cancel
+                Close
               </button>
-              <button
-                onClick={handleSubmit}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-              >
-                Save
-              </button>
+
+              {!isViewer && (
+                <button
+                  onClick={handleSubmit}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  Save
+                </button>
+              )}
             </div>
           </div>
         </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 
 interface SectionToggle {
   profile: boolean;
@@ -12,6 +13,7 @@ interface SectionToggle {
 
 type ProfileData = {
   name: string;
+  email?: string;
   age: number;
   gender: string;
   bloodType?: string;
@@ -25,6 +27,8 @@ type BasicEntry = {
 };
 
 export default function PrintData() {
+  const { data: session } = useSession();
+
   const [sections, setSections] = useState<SectionToggle>({
     profile: true,
     medications: true,
@@ -34,6 +38,8 @@ export default function PrintData() {
   });
 
   const [loading, setLoading] = useState(true);
+  const [isViewer, setIsViewer] = useState(false);
+
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [medications, setMedications] = useState<BasicEntry[]>([]);
   const [tests, setTests] = useState<BasicEntry[]>([]);
@@ -49,11 +55,16 @@ export default function PrintData() {
         fetch("/api/patient-data/appointments").then((res) => res.json()),
         fetch("/api/patient-data/procedures").then((res) => res.json())
       ]);
+
       setProfile(p);
       setMedications(m);
       setTests(t);
       setAppointments(a);
       setProcedures(pr);
+
+      if (session?.user?.email && p.email && session.user.email !== p.email) {
+        setIsViewer(true);
+      }
     } catch (err) {
       console.error("❌ Failed to load print data:", err);
     } finally {
@@ -63,22 +74,31 @@ export default function PrintData() {
 
   useEffect(() => {
     fetchAllData();
-  }, []);
+  }, [session]);
 
   const handleToggle = (key: keyof SectionToggle) => {
+    if (isViewer) return;
     setSections((prev) => ({ ...prev, [key]: !prev[key] }));
   };
   return (
     <div className="space-y-6 max-w-4xl mx-auto print:max-w-full">
       <div className="flex justify-between items-center print:hidden">
         <h2 className="text-xl font-semibold text-gray-800">Print Data</h2>
-        <button
-          onClick={() => window.print()}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-        >
-          Print
-        </button>
+        {!isViewer && (
+          <button
+            onClick={() => window.print()}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Print
+          </button>
+        )}
       </div>
+
+      {isViewer && (
+        <div className="bg-blue-100 border border-blue-300 text-blue-700 p-3 rounded text-sm print:hidden">
+          👁️ You are viewing shared print data. Printing and section toggling is disabled.
+        </div>
+      )}
 
       <div className="print:hidden">
         <p className="text-sm text-gray-500 mb-2">Select sections to include:</p>
@@ -89,6 +109,7 @@ export default function PrintData() {
                 type="checkbox"
                 checked={value}
                 onChange={() => handleToggle(key as keyof SectionToggle)}
+                disabled={isViewer}
               />
               <span className="capitalize">{key}</span>
             </label>

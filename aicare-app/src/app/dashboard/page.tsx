@@ -9,9 +9,10 @@ import { HTML5Backend } from "react-dnd-html5-backend";
 import DashboardHeader from "@/components/DashboardHeader";
 import PatientProfile from "@/components/PatientProfile";
 import Sidebar from "@/components/Sidebar";
-import AppointmentList from "@/components/AppointmentList";
-import MedicationReminders from "@/components/MedicationReminders";
-import DataVisualization from "@/components/DataVisualization";
+// import AppointmentList from "@/components/AppointmentList";
+// import MedicationReminders from "@/components/MedicationReminders";
+// import DataVisualization from "@/components/DataVisualization";
+import PatientData from "@/components/PatientData";
 import MedicalRecords from "@/components/MedicalRecords";
 import ProfileProgressBar from "@/components/ProfileProgressBar";
 import ChatbotWidget from "@/components/ChatbotWidget";
@@ -224,9 +225,15 @@ export default function Dashboard() {
             </div>
           )}
 
-          {activeFeature === "appointments" && <AppointmentList />}
+          {activeFeature === "patientData" && (
+            <section className="flex-1 bg-white rounded-lg shadow-md overflow-y-auto p-6">
+              <PatientData />
+            </section>
+          )}
+
+          {/* {activeFeature === "appointments" && <AppointmentList />}
           {activeFeature === "medications" && <MedicationReminders />}
-          {activeFeature === "visualization" && <DataVisualization />}
+          {activeFeature === "visualization" && <DataVisualization />} */}
 
           {activeFeature === "medicalRecords" && (
             <section className="flex-1 bg-white rounded-lg shadow-md overflow-y-auto p-6">

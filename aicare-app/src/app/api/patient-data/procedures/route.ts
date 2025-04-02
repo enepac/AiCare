@@ -2,6 +2,22 @@ import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { dbConnect } from "@/utils/db";
 import ProcedureRecord from "@/models/ProcedureRecord";
+import SharedAccess from "@/models/SharedAccess";
+
+async function resolveTargetEmail(
+  tokenEmail: string
+): Promise<{ email: string; readonly: boolean }> {
+  const access = await SharedAccess.findOne({
+    viewerEmail: tokenEmail,
+    status: "accepted"
+  });
+
+  if (access) {
+    return { email: access.patientEmail, readonly: true };
+  }
+
+  return { email: tokenEmail, readonly: false };
+}
 
 // GET: All procedures
 export async function GET(req: NextRequest) {
@@ -9,7 +25,9 @@ export async function GET(req: NextRequest) {
   if (!token?.email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   await dbConnect();
-  const records = await ProcedureRecord.find({ userEmail: token.email }).sort({ date: -1 });
+  const { email } = await resolveTargetEmail(token.email);
+
+  const records = await ProcedureRecord.find({ userEmail: email }).sort({ date: -1 });
   return NextResponse.json(records);
 }
 
@@ -18,13 +36,12 @@ export async function POST(req: NextRequest) {
   const token = await getToken({ req });
   if (!token?.email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await req.json();
   await dbConnect();
+  const { email, readonly } = await resolveTargetEmail(token.email);
+  if (readonly) return NextResponse.json({ error: "Viewer cannot modify data" }, { status: 403 });
 
-  const record = await ProcedureRecord.create({
-    ...body,
-    userEmail: token.email
-  });
+  const body = await req.json();
+  const record = await ProcedureRecord.create({ ...body, userEmail: email });
 
   return NextResponse.json(record);
 }
@@ -34,13 +51,16 @@ export async function PUT(req: NextRequest) {
   const token = await getToken({ req });
   if (!token?.email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  await dbConnect();
+  const { email, readonly } = await resolveTargetEmail(token.email);
+  if (readonly) return NextResponse.json({ error: "Viewer cannot modify data" }, { status: 403 });
+
   const body = await req.json();
   const { _id, ...update } = body;
   if (!_id) return NextResponse.json({ error: "Missing _id" }, { status: 400 });
 
-  await dbConnect();
   const updated = await ProcedureRecord.findOneAndUpdate(
-    { _id, userEmail: token.email },
+    { _id, userEmail: email },
     { $set: update },
     { new: true }
   );
@@ -54,11 +74,13 @@ export async function DELETE(req: NextRequest) {
   const token = await getToken({ req });
   if (!token?.email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  await dbConnect();
+  const { email, readonly } = await resolveTargetEmail(token.email);
+  if (readonly) return NextResponse.json({ error: "Viewer cannot modify data" }, { status: 403 });
+
   const id = req.nextUrl.searchParams.get("id");
   if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
 
-  await dbConnect();
-  const deleted = await ProcedureRecord.findOneAndDelete({ _id: id, userEmail: token.email });
-
+  const deleted = await ProcedureRecord.findOneAndDelete({ _id: id, userEmail: email });
   return NextResponse.json({ message: "Deleted", deleted });
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useSession } from "next-auth/react";
 import { format } from "date-fns";
 
 type TestResult = {
@@ -17,17 +18,21 @@ type TestResult = {
   parsedByAI?: boolean;
   sourceType: "manual" | "upload";
   fileName?: string;
+  userEmail?: string;
 };
 
 export default function TestResults() {
+  const { data: session } = useSession();
   const [results, setResults] = useState<TestResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const [isViewer, setIsViewer] = useState(false);
+
   const [form, setForm] = useState<Partial<TestResult>>({
     testDate: format(new Date(), "yyyy-MM-dd"),
     sourceType: "manual"
   });
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchResults = async () => {
@@ -35,6 +40,10 @@ export default function TestResults() {
       const res = await fetch("/api/patient-data/tests");
       const data = await res.json();
       setResults(data);
+
+      if (data.length > 0 && session?.user?.email && data[0].userEmail !== session.user.email) {
+        setIsViewer(true);
+      }
     } catch (err) {
       console.error("❌ Failed to load test results:", err);
     } finally {
@@ -44,20 +53,19 @@ export default function TestResults() {
 
   useEffect(() => {
     fetchResults();
-  }, []);
+  }, [session]);
 
   const handleFormChange = (
     field: keyof TestResult,
     value: string | number | boolean | null | undefined
   ) => {
+    if (isViewer) return;
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-
-    setUploading(true);
+    if (!file || isViewer) return;
 
     const formData = new FormData();
     formData.append("file", file);
@@ -83,12 +91,12 @@ export default function TestResults() {
       }
     } catch (err) {
       console.error("❌ Upload error:", err);
-    } finally {
-      setUploading(false);
     }
   };
 
   const handleSubmit = async () => {
+    if (isViewer) return;
+
     const res = await fetch("/api/patient-data/tests", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -107,13 +115,21 @@ export default function TestResults() {
     <div className="space-y-6 max-w-4xl mx-auto">
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-semibold text-gray-800">Test Results</h2>
-        <button
-          onClick={() => setModalOpen(true)}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-        >
-          + Add Test Result
-        </button>
+        {!isViewer && (
+          <button
+            onClick={() => setModalOpen(true)}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            + Add Test Result
+          </button>
+        )}
       </div>
+
+      {isViewer && (
+        <div className="bg-blue-100 border border-blue-300 text-blue-700 p-3 rounded text-sm">
+          👁️ You are viewing shared test results. Editing is disabled.
+        </div>
+      )}
 
       {loading ? (
         <p className="text-gray-500">Loading...</p>
@@ -187,14 +203,8 @@ export default function TestResults() {
               onChange={handleFileUpload}
               ref={fileInputRef}
               className="hidden"
+              disabled={isViewer}
             />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="px-4 py-1 text-sm bg-gray-200 hover:bg-gray-300 rounded"
-              disabled={uploading}
-            >
-              {uploading ? "Uploading..." : "Upload File (optional)"}
-            </button>
 
             <input
               type="text"
@@ -202,6 +212,7 @@ export default function TestResults() {
               value={form.testName ?? ""}
               onChange={(e) => handleFormChange("testName", e.target.value)}
               className="border p-2 rounded w-full"
+              disabled={isViewer}
             />
 
             <div className="flex gap-2">
@@ -211,6 +222,7 @@ export default function TestResults() {
                 value={form.value ?? ""}
                 onChange={(e) => handleFormChange("value", e.target.value)}
                 className="border p-2 rounded w-1/2"
+                disabled={isViewer}
               />
               <input
                 type="text"
@@ -218,6 +230,7 @@ export default function TestResults() {
                 value={form.unit ?? ""}
                 onChange={(e) => handleFormChange("unit", e.target.value)}
                 className="border p-2 rounded w-1/2"
+                disabled={isViewer}
               />
             </div>
 
@@ -227,12 +240,14 @@ export default function TestResults() {
               value={form.referenceRange ?? ""}
               onChange={(e) => handleFormChange("referenceRange", e.target.value)}
               className="border p-2 rounded w-full"
+              disabled={isViewer}
             />
 
             <select
               value={form.interpretation ?? ""}
               onChange={(e) => handleFormChange("interpretation", e.target.value)}
               className="border p-2 rounded w-full"
+              disabled={isViewer}
             >
               <option value="">Interpretation</option>
               <option value="Normal">Normal</option>
@@ -246,6 +261,7 @@ export default function TestResults() {
               value={form.testDate ?? ""}
               onChange={(e) => handleFormChange("testDate", e.target.value)}
               className="border p-2 rounded w-full"
+              disabled={isViewer}
             />
 
             <textarea
@@ -253,6 +269,7 @@ export default function TestResults() {
               value={form.notes ?? ""}
               onChange={(e) => handleFormChange("notes", e.target.value)}
               className="border p-2 rounded w-full"
+              disabled={isViewer}
             />
 
             <div className="flex justify-end gap-2 pt-2">
@@ -263,14 +280,17 @@ export default function TestResults() {
                 }}
                 className="px-4 py-2 border rounded"
               >
-                Cancel
+                Close
               </button>
-              <button
-                onClick={handleSubmit}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-              >
-                Save
-              </button>
+
+              {!isViewer && (
+                <button
+                  onClick={handleSubmit}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  Save
+                </button>
+              )}
             </div>
           </div>
         </div>

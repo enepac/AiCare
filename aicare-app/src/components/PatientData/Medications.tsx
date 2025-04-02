@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
+import { useSession } from "next-auth/react";
 import { format } from "date-fns";
 
 type Medication = {
   _id?: string;
+  userEmail?: string;
   name: string;
   dosageAmount: number;
   dosageUnit: string;
@@ -23,12 +24,12 @@ type Medication = {
 };
 
 export default function Medications() {
+  const { data: session } = useSession();
+
   const [medications, setMedications] = useState<Medication[]>([]);
   const [loading, setLoading] = useState(true);
-
+  const [isViewer, setIsViewer] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
-  // const [uploading, setUploading] = useState(false);
-  // const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState<Partial<Medication>>({
     name: "",
@@ -45,6 +46,10 @@ export default function Medications() {
       const res = await fetch("/api/patient-data/medications");
       const data = await res.json();
       setMedications(data);
+
+      if (data.length > 0 && session?.user?.email && data[0].userEmail !== session.user.email) {
+        setIsViewer(true);
+      }
     } catch (err) {
       console.error("❌ Failed to load medications:", err);
     } finally {
@@ -54,16 +59,18 @@ export default function Medications() {
 
   useEffect(() => {
     fetchMedications();
-  }, []);
+  }, [session]);
 
   const handleFormChange = (
     field: keyof Medication,
     value: string | number | boolean | string[] | undefined
   ) => {
+    if (isViewer) return;
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleReminderToggle = () => {
+    if (isViewer) return;
     setForm((prev) => ({
       ...prev,
       reminder: {
@@ -72,7 +79,10 @@ export default function Medications() {
       }
     }));
   };
+
   const handleSubmit = async () => {
+    if (isViewer) return;
+
     const isEdit = !!form._id;
     const res = await fetch("/api/patient-data/medications", {
       method: isEdit ? "PUT" : "POST",
@@ -96,23 +106,32 @@ export default function Medications() {
   };
 
   const handleDelete = async (_id: string) => {
+    if (isViewer) return;
+
     const res = await fetch(`/api/patient-data/medications?id=${_id}`, {
       method: "DELETE"
     });
     if (res.ok) fetchMedications();
   };
-
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-semibold text-gray-800">Medications</h2>
-        <button
-          onClick={() => setModalOpen(true)}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-        >
-          + Add Medication
-        </button>
+        {!isViewer && (
+          <button
+            onClick={() => setModalOpen(true)}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            + Add Medication
+          </button>
+        )}
       </div>
+
+      {isViewer && (
+        <div className="bg-blue-100 border border-blue-300 text-blue-700 p-3 rounded text-sm">
+          👁️ You are viewing shared medications. Editing is disabled.
+        </div>
+      )}
 
       {loading ? (
         <p className="text-gray-500">Loading...</p>
@@ -150,29 +169,30 @@ export default function Medications() {
                 </p>
               </div>
 
-              <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    setForm(med);
-                    setModalOpen(true);
-                  }}
-                  className="text-sm text-blue-600 hover:underline"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => med._id && handleDelete(med._id)}
-                  className="text-sm text-red-600 hover:underline"
-                >
-                  Delete
-                </button>
-              </div>
+              {!isViewer && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      setForm(med);
+                      setModalOpen(true);
+                    }}
+                    className="text-sm text-blue-600 hover:underline"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => med._id && handleDelete(med._id)}
+                    className="text-sm text-red-600 hover:underline"
+                  >
+                    Delete
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>
       )}
 
-      {/* Modal */}
       {modalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-30 z-50 flex items-center justify-center">
           <div className="bg-white p-6 rounded shadow-lg max-w-md w-full space-y-4">
@@ -186,6 +206,7 @@ export default function Medications() {
               value={form.name ?? ""}
               onChange={(e) => handleFormChange("name", e.target.value)}
               className="border p-2 rounded w-full"
+              disabled={isViewer}
             />
 
             <div className="flex gap-2">
@@ -195,6 +216,7 @@ export default function Medications() {
                 value={form.dosageAmount ?? ""}
                 onChange={(e) => handleFormChange("dosageAmount", Number(e.target.value))}
                 className="border p-2 rounded w-1/2"
+                disabled={isViewer}
               />
               <input
                 type="text"
@@ -202,6 +224,7 @@ export default function Medications() {
                 value={form.dosageUnit ?? ""}
                 onChange={(e) => handleFormChange("dosageUnit", e.target.value)}
                 className="border p-2 rounded w-1/2"
+                disabled={isViewer}
               />
             </div>
 
@@ -211,6 +234,7 @@ export default function Medications() {
               value={form.frequency ?? ""}
               onChange={(e) => handleFormChange("frequency", e.target.value)}
               className="border p-2 rounded w-full"
+              disabled={isViewer}
             />
 
             <div className="flex gap-2">
@@ -219,6 +243,7 @@ export default function Medications() {
                 value={form.startDate ?? ""}
                 onChange={(e) => handleFormChange("startDate", e.target.value)}
                 className="border p-2 rounded w-1/2"
+                disabled={isViewer}
               />
               <input
                 type="date"
@@ -226,15 +251,16 @@ export default function Medications() {
                 value={form.endDate ?? ""}
                 onChange={(e) => handleFormChange("endDate", e.target.value)}
                 className="border p-2 rounded w-1/2"
+                disabled={isViewer}
               />
             </div>
 
-            {/* Reminders */}
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"
                 checked={form.reminder?.enabled ?? false}
                 onChange={handleReminderToggle}
+                disabled={isViewer}
               />
               Enable Reminders
             </label>
@@ -243,16 +269,17 @@ export default function Medications() {
               <input
                 type="time"
                 value={form.reminder.times?.[0] ?? "08:00"}
-                onChange={() => {
+                onChange={(e) =>
                   setForm((prev) => ({
                     ...prev,
                     reminder: {
-                      enabled: !prev.reminder?.enabled,
-                      times: prev.reminder?.enabled ? [] : ["08:00"]
+                      enabled: true,
+                      times: [e.target.value]
                     }
-                  }));
-                }}
+                  }))
+                }
                 className="border p-2 rounded w-full"
+                disabled={isViewer}
               />
             )}
 
@@ -261,6 +288,7 @@ export default function Medications() {
               value={form.notes ?? ""}
               onChange={(e) => handleFormChange("notes", e.target.value)}
               className="border p-2 rounded w-full"
+              disabled={isViewer}
             />
 
             <div className="flex justify-end gap-2 pt-2">
@@ -279,14 +307,16 @@ export default function Medications() {
                 }}
                 className="px-4 py-2 border rounded"
               >
-                Cancel
+                Close
               </button>
-              <button
-                onClick={handleSubmit}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-              >
-                Save
-              </button>
+              {!isViewer && (
+                <button
+                  onClick={handleSubmit}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  Save
+                </button>
+              )}
             </div>
           </div>
         </div>

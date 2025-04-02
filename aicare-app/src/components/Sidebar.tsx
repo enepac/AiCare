@@ -44,29 +44,38 @@ export default function Sidebar({ activeFeature, setActiveFeature }: SidebarProp
         >
           💬 {isCollapsed ? "" : "Chatbot"}
         </button>
-        <button
+        {/* <button
           onClick={() => navigate("appointments")}
           className={`block p-2 rounded transition w-full text-left ${
             activeFeature === "appointments" ? "bg-indigo-700" : "hover:bg-indigo-700"
           }`}
         >
           📅 {isCollapsed ? "" : "Appointments"}
-        </button>
-        <button
+        </button> */}
+        {/* <button
           onClick={() => navigate("medications")}
           className={`block p-2 rounded transition w-full text-left ${
             activeFeature === "medications" ? "bg-indigo-700" : "hover:bg-indigo-700"
           }`}
         >
           💊 {isCollapsed ? "" : "Medications"}
-        </button>
+        </button> */}
+
         <button
           onClick={() => navigate("medicalRecords")}
           className={`block p-2 rounded transition w-full text-left ${
             activeFeature === "medicalRecords" ? "bg-indigo-700" : "hover:bg-indigo-700"
           }`}
         >
-          📂 {isCollapsed ? "" : "Medical Records"}
+          📂 {isCollapsed ? "" : "Medical Documents"}
+        </button>
+        <button
+          onClick={() => navigate("patientData")}
+          className={`block p-2 rounded transition w-full text-left ${
+            activeFeature === "patientData" ? "bg-indigo-700" : "hover:bg-indigo-700"
+          }`}
+        >
+          📑 {isCollapsed ? "" : "Patient Data"}
         </button>
         <button
           onClick={() => navigate("settings")}
