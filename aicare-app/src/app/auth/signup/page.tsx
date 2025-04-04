@@ -1,19 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-export default function SignupPage() {
+function SignupPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const ref = searchParams?.get("ref") ?? null;
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-
   const [passwordErrors, setPasswordErrors] = useState<string[]>([]);
   const [feedback, setFeedback] = useState<{ type: "error" | "success"; text: string } | null>(
     null
@@ -115,7 +113,9 @@ export default function SignupPage() {
 
         {feedback && (
           <p
-            className={`mt-2 text-sm ${feedback.type === "error" ? "text-red-600" : "text-green-600"}`}
+            className={`mt-2 text-sm ${
+              feedback.type === "error" ? "text-red-600" : "text-green-600"
+            }`}
           >
             {feedback.text}
           </p>
@@ -129,5 +129,13 @@ export default function SignupPage() {
         </button>
       </div>
     </div>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={<p>Loading...</p>}>
+      <SignupPageContent />
+    </Suspense>
   );
 }
