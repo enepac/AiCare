@@ -40,9 +40,11 @@ export default function SymptomLog() {
       const data = await res.json();
       setLogs(data);
 
-      if (data.length > 0 && session?.user?.email && data[0].userEmail !== session.user.email) {
-        setIsViewer(true);
-      }
+      const selfEmail = session?.user?.email ?? "";
+      const isShared = data.some(
+        (log: SymptomLogEntry) => log.userEmail && log.userEmail !== selfEmail
+      );
+      setIsViewer(isShared);
     } catch (err) {
       console.error("❌ Error fetching symptom logs:", err);
     }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import jwt from "jsonwebtoken";
 import { dbConnect } from "@/lib/mongodb";
 import MedicalRecord from "@/models/MedicalRecord";
+import { getScopedEmail } from "@/lib/utils/viewerScope";
 
 // ✅ Allowed file types for security
 const ALLOWED_FILE_TYPES = ["application/pdf", "image/jpeg", "image/png", "application/dicom"];
@@ -12,7 +13,7 @@ interface MedicalRecordQuery {
   fileType?: string;
 }
 
-// ✅ Handle file retrieval with enhanced parsedAI integration
+// ✅ Handle file retrieval with viewer-aware access
 export async function GET(req: NextRequest) {
   await dbConnect();
 
@@ -33,8 +34,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized - Invalid token" }, { status: 401 });
   }
 
-  let userEmail: string | undefined;
-
   try {
     const decodedToken = jwt.verify(token, process.env.NEXTAUTH_SECRET!) as {
       id: string;
@@ -53,16 +52,12 @@ export async function GET(req: NextRequest) {
       console.warn("❌ Unauthorized request: Token has expired.");
       return NextResponse.json({ error: "Unauthorized - Token expired" }, { status: 401 });
     }
-
-    userEmail = decodedToken.email;
-    console.log("✅ Token Verified: User Email →", userEmail);
   } catch (error) {
     console.error("❌ JWT Verification Failed:", error);
     return NextResponse.json({ error: "Unauthorized - Invalid token" }, { status: 401 });
   }
 
   try {
-    // ✅ Extract and validate query parameters
     const url = new URL(req.url);
     const fileType = url.searchParams.get("type") || undefined;
     const limit = Number(url.searchParams.get("limit")) || 10;
@@ -77,29 +72,34 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Limit must be between 1 and 100" }, { status: 400 });
     }
 
-    const query: MedicalRecordQuery = { userEmail };
-    if (fileType) {
-      query.fileType = fileType;
+    // ✅ Get email context (viewer or self)
+    const scopedEmail = await getScopedEmail(req);
+
+    if (!scopedEmail) {
+      return NextResponse.json(
+        { error: "Unauthorized - Unable to resolve user context" },
+        { status: 401 }
+      );
     }
+
+    const query: MedicalRecordQuery = { userEmail: scopedEmail };
+    if (fileType) query.fileType = fileType;
 
     console.log("🔍 Debug: Querying DB with →", query);
 
     const records = await MedicalRecord.find(query).limit(limit).sort({ uploadDate: -1 }).lean();
 
-    console.log(`✅ Retrieved ${records.length} Records for ${userEmail}`);
+    console.log(`✅ Retrieved ${records.length} Records for ${scopedEmail}`);
 
     return NextResponse.json({
-      records: records.map(
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        ({ _id, fileName, fileType, uploadDate, filePath, userEmail, __v, ...dynamicFields }) => ({
-          _id,
-          fileName,
-          fileType,
-          uploadDate,
-          filePath,
-          parsedAI: dynamicFields
-        })
-      )
+      records: records.map(({ _id, fileName, fileType, uploadDate, filePath, ...rest }) => ({
+        _id,
+        fileName,
+        fileType,
+        uploadDate,
+        filePath,
+        parsedAI: rest
+      }))
     });
   } catch (error) {
     console.error("❌ Error fetching medical records:", error);

@@ -34,12 +34,13 @@ export default function MedicalHistory() {
     try {
       const res = await fetch("/api/patient-data/history");
       const data = await res.json();
+
       setEntries(data);
 
-      // Determine viewer mode using first record
-      if (data.length > 0 && session?.user?.email && data[0].userEmail !== session.user.email) {
-        setIsViewer(true);
-      }
+      const selfEmail = session?.user?.email ?? "";
+      const isSharedData = data.length > 0 && data[0].userEmail !== selfEmail;
+
+      setIsViewer(isSharedData);
     } catch (err) {
       console.error("❌ Failed to fetch history:", err);
     } finally {
@@ -88,7 +89,6 @@ export default function MedicalHistory() {
     <div className="space-y-6 max-w-3xl mx-auto">
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-semibold">Medical History</h2>
-
         {!isViewer && (
           <button
             onClick={() => setModalOpen(true)}
@@ -135,6 +135,7 @@ export default function MedicalHistory() {
                   </p>
                 )}
               </div>
+
               {!isViewer && (
                 <div className="flex gap-2 mt-1">
                   <button
@@ -159,7 +160,6 @@ export default function MedicalHistory() {
         </div>
       )}
 
-      {/* Modal */}
       {modalOpen && !isViewer && (
         <div className="fixed inset-0 bg-black bg-opacity-30 z-50 flex items-center justify-center">
           <div className="bg-white p-6 rounded shadow-lg max-w-md w-full space-y-4">

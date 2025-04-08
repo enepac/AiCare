@@ -24,6 +24,7 @@ export default function MedicalRecords() {
   const [error, setError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [editMap, setEditMap] = useState<Record<string, string>>({});
+  const [isViewerMode, setIsViewerMode] = useState(false);
 
   const fetchRecords = async () => {
     if (!accessToken) {
@@ -67,6 +68,11 @@ export default function MedicalRecords() {
     }
   };
 
+  const checkViewerState = () => {
+    const viewerId = typeof window !== "undefined" ? localStorage.getItem("activePatientId") : null;
+    setIsViewerMode(!!viewerId);
+  };
+
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
       setSelectedFile(event.target.files[0]);
@@ -94,7 +100,6 @@ export default function MedicalRecords() {
 
       if (!res.ok) {
         const errorResponse = await res.json();
-        console.error("Backend Error explicitly:", errorResponse);
         throw new Error(errorResponse.error || "Upload failed");
       }
 
@@ -168,6 +173,10 @@ export default function MedicalRecords() {
   };
 
   useEffect(() => {
+    checkViewerState();
+  }, []);
+
+  useEffect(() => {
     if (accessToken) {
       fetchRecords();
     }
@@ -178,10 +187,15 @@ export default function MedicalRecords() {
       <h2 className="text-xl font-semibold text-gray-800 mb-4">Medical Records</h2>
 
       <div className="mb-4 flex gap-4">
-        <input type="file" onChange={handleFileChange} className="border p-2 rounded-lg" />
+        <input
+          type="file"
+          onChange={handleFileChange}
+          className="border p-2 rounded-lg"
+          disabled={isViewerMode}
+        />
         <button
           onClick={handleUpload}
-          disabled={!selectedFile || loading}
+          disabled={!selectedFile || loading || isViewerMode}
           className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 disabled:bg-gray-400"
         >
           {loading ? "Uploading..." : "Upload"}
@@ -207,6 +221,7 @@ export default function MedicalRecords() {
                   value={editMap[record._id] ?? record.fileName}
                   onChange={(e) => handleEditChange(record._id, e.target.value)}
                   className="w-full md:w-64 p-2 border rounded mb-1"
+                  disabled={isViewerMode}
                 />
                 <p className="text-sm text-gray-600">
                   {new Date(record.uploadDate).toLocaleDateString()}
@@ -234,20 +249,24 @@ export default function MedicalRecords() {
               </div>
 
               <div className="flex gap-2 flex-wrap">
-                {editMap[record._id] && editMap[record._id] !== record.fileName && (
+                {!isViewerMode &&
+                  editMap[record._id] &&
+                  editMap[record._id] !== record.fileName && (
+                    <button
+                      onClick={() => handleSaveMetadata(record._id)}
+                      className="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600"
+                    >
+                      Save
+                    </button>
+                  )}
+                {!isViewerMode && (
                   <button
-                    onClick={() => handleSaveMetadata(record._id)}
-                    className="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600"
+                    onClick={() => handleDelete(record._id)}
+                    className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600"
                   >
-                    Save
+                    Delete
                   </button>
                 )}
-                <button
-                  onClick={() => handleDelete(record._id)}
-                  className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600"
-                >
-                  Delete
-                </button>
               </div>
             </li>
           ))}

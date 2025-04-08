@@ -1,49 +1,44 @@
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/authOptions";
+import { cookies } from "next/headers";
+import { getToken } from "next-auth/jwt";
+import { NextRequest } from "next/server";
 import { dbConnect } from "@/lib/mongodb";
 import { SharedAccess } from "@/models/SharedAccess";
-import User from "@/models/user";
 
-export async function getScopedEmail(): Promise<string | null> {
+// ✅ Return scoped email — own if self, or owner's if in viewer mode
+export async function getScopedEmail(req: NextRequest): Promise<string | null> {
   await dbConnect();
-  const session = await getServerSession(authOptions);
 
-  if (!session?.user?.email) return null;
+  const cookieStore = cookies();
+  const activePatientId = cookieStore.get("activePatientId")?.value;
 
-  const viewer = await User.findOne({ email: session.user.email });
+  const token = await getToken({ req });
+  const viewerId = token?.sub;
+  const viewerEmail = token?.email;
 
-  if (!viewer) return null;
+  if (!viewerEmail) return null;
 
-  const shared = await SharedAccess.findOne({
-    viewerId: viewer._id,
+  if (!activePatientId || activePatientId === viewerId) {
+    return viewerEmail;
+  }
+
+  const access = await SharedAccess.findOne({
+    ownerId: activePatientId,
+    viewerId,
     status: "accepted"
   }).populate("ownerId");
 
-  if (shared?.ownerId?.email) {
-    return shared.ownerId.email; // Scoped as a viewer
-  }
+  const owner = access?.ownerId as { email?: string };
 
-  return viewer.email; // Fallback to self
+  return owner?.email ?? viewerEmail;
 }
 
-export async function getScopedUserId(): Promise<string | null> {
-  await dbConnect();
-  const session = await getServerSession(authOptions);
+// ✅ Determine if current session is in viewer mode
+export async function isViewerMode(req: NextRequest): Promise<boolean> {
+  const cookieStore = cookies();
+  const activePatientId = cookieStore.get("activePatientId")?.value;
 
-  if (!session?.user?.email) return null;
+  const token = await getToken({ req });
+  const viewerId = token?.sub;
 
-  const viewer = await User.findOne({ email: session.user.email });
-
-  if (!viewer) return null;
-
-  const shared = await SharedAccess.findOne({
-    viewerId: viewer._id,
-    status: "accepted"
-  });
-
-  if (shared?.ownerId) {
-    return shared.ownerId.toString(); // Scoped as a viewer
-  }
-
-  return viewer._id.toString(); // Fallback to self
+  return Boolean(activePatientId && activePatientId !== viewerId);
 }

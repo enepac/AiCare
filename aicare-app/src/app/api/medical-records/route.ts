@@ -11,6 +11,8 @@ import { parseDocx } from "@/lib/fileParsers/parseDocx";
 import { parseRtfWithDocling } from "@/lib/fileParsers/parseRtfDocling";
 import { parseHtmlCheerio } from "@/lib/fileParsers/parseHtmlCheerio";
 import { getScopedEmail } from "@/lib/utils/viewerScope";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/authOptions";
 
 const ALLOWED_FILE_TYPES = [
   "application/pdf",
@@ -30,12 +32,20 @@ const ALLOWED_FILE_TYPES = [
 export async function POST(req: NextRequest) {
   await dbConnect();
 
-  const userEmail = await getScopedEmail();
+  const session = await getServerSession(authOptions);
+  const userEmail = await getScopedEmail(req);
 
-  if (!userEmail) {
+  if (!session?.user?.email || !userEmail) {
     return NextResponse.json(
       { error: "Unauthorized - Unable to resolve user context" },
       { status: 401 }
+    );
+  }
+
+  if (session.user.email !== userEmail) {
+    return NextResponse.json(
+      { error: "Forbidden - Viewers cannot upload medical records" },
+      { status: 403 }
     );
   }
 
