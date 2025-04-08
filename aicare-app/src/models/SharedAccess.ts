@@ -1,29 +1,35 @@
-import { Schema, Document, model, models } from "mongoose";
+import mongoose, { Schema, Document, Types } from "mongoose";
 
 export interface ISharedAccess extends Document {
-  patientEmail: string;
-  viewerEmail: string;
-  status: "pending" | "accepted" | "revoked";
-  createdAt?: Date;
-  updatedAt?: Date;
+  ownerId: Types.ObjectId;
+  viewerId: Types.ObjectId;
+  status: "pending" | "accepted";
+  createdAt: Date;
 }
 
-const SharedAccessSchema = new Schema<ISharedAccess>(
+const sharedAccessSchema = new Schema<ISharedAccess>(
   {
-    patientEmail: { type: String, required: true },
-    viewerEmail: { type: String, required: true },
+    ownerId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true
+    },
+    viewerId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true
+    },
     status: {
       type: String,
-      enum: ["pending", "accepted", "revoked"],
+      enum: ["pending", "accepted"],
       default: "pending"
     }
   },
   { timestamps: true }
 );
 
-SharedAccessSchema.index({ patientEmail: 1, viewerEmail: 1 }, { unique: true });
+// Ensure a viewer can only receive one invite per owner
+sharedAccessSchema.index({ ownerId: 1, viewerId: 1 }, { unique: true });
 
-const SharedAccess =
-  models.SharedAccess || model<ISharedAccess>("SharedAccess", SharedAccessSchema);
-
-export default SharedAccess;
+export const SharedAccess =
+  mongoose.models.SharedAccess || mongoose.model<ISharedAccess>("SharedAccess", sharedAccessSchema);

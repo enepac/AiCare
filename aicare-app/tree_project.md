@@ -47,19 +47,57 @@
 │   │   │   └── update
 │   │   │       └── route.ts
 │   │   ├── patient-data
+│   │   │   ├── accept
+│   │   │   │   └── route.ts
+│   │   │   ├── access-list
+│   │   │   │   └── route.ts
 │   │   │   ├── appointments
 │   │   │   │   └── route.ts
+│   │   │   ├── cancel
+│   │   │   │   └── route.ts
+│   │   │   ├── decline-request
+│   │   │   │   └── route.ts
+│   │   │   ├── handle-request
+│   │   │   │   └── route.ts
+│   │   │   ├── has-invites
+│   │   │   │   └── route.ts
 │   │   │   ├── history
+│   │   │   │   └── route.ts
+│   │   │   ├── invites
 │   │   │   │   └── route.ts
 │   │   │   ├── medications
 │   │   │   │   └── route.ts
 │   │   │   ├── procedures
 │   │   │   │   └── route.ts
+│   │   │   ├── reject
+│   │   │   │   └── route.ts
+│   │   │   ├── reject-request
+│   │   │   │   └── route.ts
+│   │   │   ├── request-access
+│   │   │   │   └── route.ts
+│   │   │   ├── requests
+│   │   │   │   └── route.ts
+│   │   │   ├── request-view-access
+│   │   │   │   └── route.ts
+│   │   │   ├── respond
+│   │   │   │   └── route.ts
+│   │   │   ├── respond-access
+│   │   │   │   └── route.ts
+│   │   │   ├── respond-view-request
+│   │   │   │   └── route.ts
+│   │   │   ├── revoke
+│   │   │   │   └── route.ts
+│   │   │   ├── revoke-access
+│   │   │   │   └── route.ts
 │   │   │   ├── share
+│   │   │   │   └── route.ts
+│   │   │   ├── stop-sharing
 │   │   │   │   └── route.ts
 │   │   │   ├── symptoms
 │   │   │   │   └── route.ts
-│   │   │   └── tests
+│   │   │   ├── tests
+│   │   │   │   └── route.ts
+│   │   │   └── unshare
 │   │   │       └── route.ts
 │   │   ├── profile
 │   │   │   ├── progress
@@ -68,14 +106,23 @@
 │   │   │   ├── update
 │   │   │   │   └── route.ts
 │   │   │   └── update.ts
+│   │   ├── shared-access
+│   │   │   └── viewable-patients
+│   │   │       └── route.ts
 │   │   ├── test-db
 │   │   │   └── route.ts
-│   │   └── testing
-│   │       ├── reset-users
-│   │       │   └── route.ts
-│   │       ├── test-db
-│   │       │   └── route.ts
-│   │       └── user-count
+│   │   ├── testing
+│   │   │   ├── reset-users
+│   │   │   │   └── route.ts
+│   │   │   ├── test-db
+│   │   │   │   └── route.ts
+│   │   │   └── user-count
+│   │   │       └── route.ts
+│   │   ├── users
+│   │   │   └── search
+│   │   │       └── route.ts
+│   │   └── viewer
+│   │       └── switch
 │   │           └── route.ts
 │   ├── assessment
 │   │   └── page.tsx
@@ -99,6 +146,8 @@
 │   │       └── page.tsx
 │   ├── dashboard
 │   │   ├── chatbot
+│   │   │   └── page.tsx
+│   │   ├── notifications
 │   │   │   └── page.tsx
 │   │   └── page.tsx
 │   ├── favicon.ico
@@ -141,6 +190,8 @@
 │   ├── PatientProfile.tsx
 │   ├── ProfileProgressBar.tsx
 │   ├── Providers.tsx
+│   ├── SharedAccess
+│   │   └── StopAccessButton.tsx
 │   ├── Sidebar.tsx
 │   └── ui
 │       └── button.tsx
@@ -173,6 +224,10 @@
 │   │   └── parseWithOCR.ts
 │   ├── parser
 │   │   └── parseWithGPT.ts
+│   ├── server
+│   │   └── resolveEffectiveUser.ts
+│   ├── utils
+│   │   └── viewerScope.ts
 │   └── utils.ts
 ├── middleware
 │   └── auth.ts
@@ -214,4 +269,4 @@
 └── workers
     └── parseWorker.ts
 
-76 directories, 139 files
+105 directories, 165 files

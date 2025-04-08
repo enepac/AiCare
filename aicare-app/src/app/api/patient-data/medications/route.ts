@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { dbConnect } from "@/utils/db";
 import MedicationRecord from "@/models/MedicationRecord";
-import SharedAccess from "@/models/SharedAccess";
+import { SharedAccess } from "@/models/SharedAccess";
 
 // Utility to resolve userEmail or shared access
 async function resolveTargetEmail(

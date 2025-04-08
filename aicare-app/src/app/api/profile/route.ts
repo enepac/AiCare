@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "../../../lib/authOptions";
+import { authOptions } from "@/lib/authOptions";
 import User from "@/models/user";
 import { dbConnect } from "@/lib/mongodb";
+import { resolveEffectiveUser } from "@/lib/server/resolveEffectiveUser";
 
-import SharedAccess from "@/models/SharedAccess";
-
-export async function GET() {
+export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -15,21 +14,10 @@ export async function GET() {
   await dbConnect();
 
   try {
-    let email = session.user.email;
-
-    // ✅ Check if user is a viewer with accepted access
-    const access = await SharedAccess.findOne({
-      viewerEmail: email,
-      status: "accepted"
-    });
-
-    if (access) {
-      console.log(`👁️ Shared viewer detected: ${email} viewing ${access.patientEmail}`);
-      email = access.patientEmail;
-    }
+    const effectiveEmail = await resolveEffectiveUser(req);
 
     const user = await User.findOne(
-      { email },
+      { email: effectiveEmail },
       {
         name: 1,
         email: 1,
@@ -89,7 +77,7 @@ export async function GET() {
 
     return NextResponse.json({
       name,
-      email,
+      email: effectiveEmail,
       age,
       gender,
       allergies,

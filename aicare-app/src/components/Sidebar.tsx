@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 interface SidebarProps {
   activeFeature: string;
@@ -9,10 +9,27 @@ interface SidebarProps {
 
 export default function Sidebar({ activeFeature, setActiveFeature }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [hasPendingInvites, setHasPendingInvites] = useState(false);
 
   const navigate = (feature: string) => {
     setActiveFeature(feature);
   };
+
+  useEffect(() => {
+    const checkPendingInvites = async () => {
+      try {
+        const res = await fetch("/api/patient-data/has-invites");
+        if (res.ok) {
+          const data = await res.json();
+          setHasPendingInvites(data.hasPending === true);
+        }
+      } catch {
+        console.error("❌ Failed to check for pending invites.");
+      }
+    };
+
+    checkPendingInvites();
+  }, []);
 
   return (
     <aside
@@ -36,6 +53,7 @@ export default function Sidebar({ activeFeature, setActiveFeature }: SidebarProp
         >
           🏠 {isCollapsed ? "" : "Dashboard"}
         </button>
+
         <button
           onClick={() => navigate("chatbot")}
           className={`block p-2 rounded transition w-full text-left ${
@@ -44,22 +62,6 @@ export default function Sidebar({ activeFeature, setActiveFeature }: SidebarProp
         >
           💬 {isCollapsed ? "" : "Chatbot"}
         </button>
-        {/* <button
-          onClick={() => navigate("appointments")}
-          className={`block p-2 rounded transition w-full text-left ${
-            activeFeature === "appointments" ? "bg-indigo-700" : "hover:bg-indigo-700"
-          }`}
-        >
-          📅 {isCollapsed ? "" : "Appointments"}
-        </button> */}
-        {/* <button
-          onClick={() => navigate("medications")}
-          className={`block p-2 rounded transition w-full text-left ${
-            activeFeature === "medications" ? "bg-indigo-700" : "hover:bg-indigo-700"
-          }`}
-        >
-          💊 {isCollapsed ? "" : "Medications"}
-        </button> */}
 
         <button
           onClick={() => navigate("medicalRecords")}
@@ -69,6 +71,7 @@ export default function Sidebar({ activeFeature, setActiveFeature }: SidebarProp
         >
           📂 {isCollapsed ? "" : "Medical Documents"}
         </button>
+
         <button
           onClick={() => navigate("patientData")}
           className={`block p-2 rounded transition w-full text-left ${
@@ -77,6 +80,19 @@ export default function Sidebar({ activeFeature, setActiveFeature }: SidebarProp
         >
           📑 {isCollapsed ? "" : "Patient Data"}
         </button>
+
+        <button
+          onClick={() => navigate("notifications")}
+          className={`relative block p-2 rounded transition w-full text-left ${
+            activeFeature === "notifications" ? "bg-indigo-700" : "hover:bg-indigo-700"
+          }`}
+        >
+          🔔 {isCollapsed ? "" : "Notifications"}
+          {hasPendingInvites && (
+            <span className="absolute top-1.5 right-2 h-2 w-2 rounded-full bg-red-500" />
+          )}
+        </button>
+
         <button
           onClick={() => navigate("settings")}
           className={`block p-2 rounded transition w-full text-left ${

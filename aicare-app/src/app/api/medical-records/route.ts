@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { dbConnect } from "@/lib/mongodb";
-import jwt from "jsonwebtoken";
 import MedicalRecord from "@/models/MedicalRecord";
 import mime from "mime-types";
 import { uploadFileToS3 } from "@/lib/aws/s3Uploader";
@@ -11,6 +10,7 @@ import { generateSchemaSummary } from "@/lib/mongodb/schemaSummary";
 import { parseDocx } from "@/lib/fileParsers/parseDocx";
 import { parseRtfWithDocling } from "@/lib/fileParsers/parseRtfDocling";
 import { parseHtmlCheerio } from "@/lib/fileParsers/parseHtmlCheerio";
+import { getScopedEmail } from "@/lib/utils/viewerScope";
 
 const ALLOWED_FILE_TYPES = [
   "application/pdf",
@@ -30,30 +30,16 @@ const ALLOWED_FILE_TYPES = [
 export async function POST(req: NextRequest) {
   await dbConnect();
 
-  const authHeader = req.headers.get("Authorization");
-  console.log("🔍 Authorization Header:", authHeader);
+  const userEmail = await getScopedEmail();
 
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return NextResponse.json({ error: "Unauthorized - No token provided" }, { status: 401 });
+  if (!userEmail) {
+    return NextResponse.json(
+      { error: "Unauthorized - Unable to resolve user context" },
+      { status: 401 }
+    );
   }
 
-  const token = authHeader.split(" ")[1];
-
-  let userEmail: string;
-
-  try {
-    const decodedToken = jwt.verify(token, process.env.NEXTAUTH_SECRET!) as { email?: string };
-
-    if (!decodedToken.email) {
-      return NextResponse.json({ error: "Unauthorized - Token invalid" }, { status: 401 });
-    }
-
-    userEmail = decodedToken.email;
-    console.log("✅ Token Verified: User Email →", userEmail);
-  } catch (error) {
-    console.error("❌ JWT Verification Failed:", error);
-    return NextResponse.json({ error: "Unauthorized - Invalid token" }, { status: 401 });
-  }
+  console.log("✅ Scoped User Email:", userEmail);
 
   try {
     const formData = await req.formData();

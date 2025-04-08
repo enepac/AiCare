@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { dbConnect } from "@/utils/db";
 import AppointmentRecord from "@/models/AppointmentRecord";
-import SharedAccess from "@/models/SharedAccess";
+import { SharedAccess } from "@/models/SharedAccess";
 
 // Shared viewer logic
 async function resolveTargetEmail(
