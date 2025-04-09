@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
+import { useViewerContext } from "@/context/ViewerContext";
 
 interface UserProfile {
   name: string;
@@ -23,11 +24,12 @@ interface UserProfile {
 
 export default function Profile() {
   const { data: session } = useSession();
+  const { isViewer } = useViewerContext();
+
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
-  const [isViewer, setIsViewer] = useState(false);
 
   const fetchProfile = async () => {
     try {
@@ -35,10 +37,6 @@ export default function Profile() {
       if (!res.ok) throw new Error("Failed to fetch profile");
       const data: UserProfile = await res.json();
       setProfile(data);
-
-      if (session?.user?.email && session.user.email !== data.email) {
-        setIsViewer(true);
-      }
     } catch (err) {
       console.error("❌ Error fetching profile:", err);
     } finally {
@@ -77,6 +75,7 @@ export default function Profile() {
 
   if (loading) return <p>Loading profile...</p>;
   if (!profile) return <p>Could not load profile.</p>;
+
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
       <h2 className="text-xl font-semibold text-gray-800">Patient Profile</h2>
@@ -190,7 +189,6 @@ export default function Profile() {
           disabled={isViewer}
         />
 
-        {/* Pregnancy Toggle */}
         {profile.gender === "Female" && (
           <div className="col-span-2 space-y-2">
             <label className="flex items-center gap-2">

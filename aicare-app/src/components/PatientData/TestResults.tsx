@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import { format } from "date-fns";
+import { useViewerContext } from "@/context/ViewerContext";
 
 type TestResult = {
   _id?: string;
@@ -23,27 +24,45 @@ type TestResult = {
 
 export default function TestResults() {
   const { data: session } = useSession();
+  const { isViewer } = useViewerContext();
+
   const [results, setResults] = useState<TestResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
-  const [isViewer, setIsViewer] = useState(false);
+  const [viewerEmail, setViewerEmail] = useState<string | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState<Partial<TestResult>>({
     testDate: format(new Date(), "yyyy-MM-dd"),
     sourceType: "manual"
   });
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const syncViewerEmail = () => {
+      const email = localStorage.getItem("viewerEmail");
+      setViewerEmail(email || null);
+    };
+
+    syncViewerEmail();
+    window.addEventListener("storage", syncViewerEmail);
+    return () => window.removeEventListener("storage", syncViewerEmail);
+  }, []);
+
+  const buildViewerHeaders = (): Record<string, string> => {
+    const headers: Record<string, string> = {};
+    if (viewerEmail) headers["X-Viewer-Email"] = viewerEmail;
+    return headers;
+  };
 
   const fetchResults = async () => {
+    setLoading(true);
     try {
-      const res = await fetch("/api/patient-data/tests");
+      const res = await fetch("/api/patient-data/tests", {
+        headers: buildViewerHeaders()
+      });
       const data = await res.json();
       setResults(data);
-
-      if (data.length > 0 && session?.user?.email && data[0].userEmail !== session.user.email) {
-        setIsViewer(true);
-      }
     } catch (err) {
       console.error("❌ Failed to load test results:", err);
     } finally {
@@ -53,7 +72,7 @@ export default function TestResults() {
 
   useEffect(() => {
     fetchResults();
-  }, [session]);
+  }, [session, viewerEmail]);
 
   const handleFormChange = (
     field: keyof TestResult,
@@ -97,9 +116,20 @@ export default function TestResults() {
   const handleSubmit = async () => {
     if (isViewer) return;
 
+    const requiredFields = ["testName", "testDate", "sourceType"];
+    for (const field of requiredFields) {
+      if (!form[field as keyof TestResult]) {
+        alert(`Missing required field: ${field}`);
+        return;
+      }
+    }
+
     const res = await fetch("/api/patient-data/tests", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...buildViewerHeaders()
+      },
       body: JSON.stringify(form)
     });
 
@@ -108,9 +138,12 @@ export default function TestResults() {
       setForm({ testDate: format(new Date(), "yyyy-MM-dd"), sourceType: "manual" });
       fetchResults();
     } else {
-      console.error("❌ Failed to save test result.");
+      const error = await res.json();
+      console.error("❌ Failed to save test result:", error.message);
+      alert("Failed to save test result. See console for details.");
     }
   };
+
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div className="flex justify-between items-center">

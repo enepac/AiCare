@@ -4,6 +4,7 @@ import "./globals.css";
 import { Navbar } from "@/components/Navbar";
 import { SessionProvider } from "next-auth/react";
 import { usePathname } from "next/navigation";
+import { ViewerProvider } from "@/context/ViewerContext";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -13,15 +14,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <SessionProvider>
-      <html lang="en">
-        <body>
-          <div className="flex flex-col min-h-screen">
-            {!hideNavbar && <Navbar />}{" "}
-            {/* ✅ Navbar is shown only on pages except login & profile setup */}
-            <main className="flex-grow bg-gray-100">{children}</main>
-          </div>
-        </body>
-      </html>
+      <ViewerProvider>
+        <html lang="en">
+          <body>
+            <div className="flex flex-col min-h-screen">
+              {!hideNavbar && <Navbar />}
+              <main className="flex-grow bg-gray-100">{children}</main>
+            </div>
+          </body>
+        </html>
+      </ViewerProvider>
     </SessionProvider>
   );
 }

@@ -9,9 +9,11 @@ import {
   startOfWeek,
   endOfWeek,
   addDays,
-  isToday
+  isToday,
+  parseISO
 } from "date-fns";
 import clsx from "clsx";
+import { useViewerContext } from "@/context/ViewerContext";
 
 type SymptomLogEntry = {
   _id?: string;
@@ -23,13 +25,14 @@ type SymptomLogEntry = {
 
 export default function SymptomLog() {
   const { data: session } = useSession();
+  const { isViewer } = useViewerContext();
 
   const [logs, setLogs] = useState<SymptomLogEntry[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [formSymptoms, setFormSymptoms] = useState<string[]>([]);
   const [formNote, setFormNote] = useState("");
-  const [isViewer, setIsViewer] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
 
   const today = new Date();
   const [currentMonth] = useState(today);
@@ -39,12 +42,6 @@ export default function SymptomLog() {
       const res = await fetch("/api/patient-data/symptoms");
       const data = await res.json();
       setLogs(data);
-
-      const selfEmail = session?.user?.email ?? "";
-      const isShared = data.some(
-        (log: SymptomLogEntry) => log.userEmail && log.userEmail !== selfEmail
-      );
-      setIsViewer(isShared);
     } catch (err) {
       console.error("❌ Error fetching symptom logs:", err);
     }
@@ -62,7 +59,52 @@ export default function SymptomLog() {
     setSelectedDate(iso);
     setFormSymptoms(existing?.symptoms || []);
     setFormNote(existing?.notes || "");
+    setEditId(existing?._id || null);
     setModalOpen(true);
+  };
+
+  const handleSave = async () => {
+    if (isViewer || !selectedDate) return;
+
+    const method = editId ? "PUT" : "POST";
+    const body = {
+      date: selectedDate,
+      symptoms: formSymptoms,
+      notes: formNote,
+      ...(editId && { _id: editId })
+    };
+
+    const res = await fetch("/api/patient-data/symptoms", {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+
+    if (res.ok) {
+      closeModal();
+      fetchLogs();
+    }
+  };
+
+  const handleDelete = async () => {
+    if (isViewer || !editId) return;
+
+    const res = await fetch(`/api/patient-data/symptoms?id=${editId}`, {
+      method: "DELETE"
+    });
+
+    if (res.ok) {
+      closeModal();
+      fetchLogs();
+    }
+  };
+
+  const closeModal = () => {
+    setModalOpen(false);
+    setSelectedDate(null);
+    setFormSymptoms([]);
+    setFormNote("");
+    setEditId(null);
   };
 
   const generateCalendar = () => {
@@ -70,78 +112,40 @@ export default function SymptomLog() {
     const end = endOfWeek(endOfMonth(currentMonth));
     const rows = [];
 
-    let date = start;
-    while (date <= end) {
+    let day = start;
+    while (day <= end) {
       const days = [];
       for (let i = 0; i < 7; i++) {
-        const iso = format(date, "yyyy-MM-dd");
+        const iso = format(day, "yyyy-MM-dd");
         const hasEntry = logs.some((log) => log.date === iso);
+        const thisDay = new Date(day);
+
         days.push(
           <td key={iso}>
             <button
-              onClick={() => openModalForDate(date)}
+              onClick={() => openModalForDate(thisDay)}
               className={clsx(
                 "w-10 h-10 rounded-full text-sm",
-                isToday(date) && "border border-blue-500",
+                isToday(thisDay) && "border border-blue-500",
                 hasEntry ? "bg-blue-100" : "hover:bg-gray-100",
                 isViewer && "cursor-not-allowed opacity-50"
               )}
               disabled={isViewer}
             >
-              {date.getDate()}
+              {thisDay.getDate()}
             </button>
           </td>
         );
-        date = addDays(date, 1);
+        day = addDays(day, 1);
       }
-      rows.push(<tr key={date.toString()}>{days}</tr>);
+      rows.push(<tr key={day.toString()}>{days}</tr>);
     }
 
     return rows;
   };
 
-  const handleSave = async () => {
-    if (isViewer || !selectedDate) return;
-
-    const res = await fetch("/api/patient-data/symptoms", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        date: selectedDate,
-        symptoms: formSymptoms,
-        notes: formNote
-      })
-    });
-
-    if (res.ok) {
-      setModalOpen(false);
-      setSelectedDate(null);
-      setFormSymptoms([]);
-      setFormNote("");
-      fetchLogs();
-    }
-  };
-
-  const handleDelete = async () => {
-    if (isViewer || !selectedDate) return;
-
-    const log = logs.find((l) => l.date === selectedDate);
-    if (!log?._id) return;
-
-    const res = await fetch(`/api/patient-data/symptoms?id=${log._id}`, {
-      method: "DELETE"
-    });
-
-    if (res.ok) {
-      setModalOpen(false);
-      setSelectedDate(null);
-      setFormSymptoms([]);
-      setFormNote("");
-      fetchLogs();
-    }
-  };
-
   const symptomOptions = ["Fever", "Cough", "Headache", "Fatigue", "Nausea", "Shortness of breath"];
+
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
       <h2 className="text-xl font-semibold">Symptom Log</h2>
@@ -167,11 +171,67 @@ export default function SymptomLog() {
         <tbody>{generateCalendar()}</tbody>
       </table>
 
+      <div className="mt-6 space-y-4">
+        {logs.length === 0 ? (
+          <p className="text-gray-500 text-sm italic">No symptom logs found for this month.</p>
+        ) : (
+          logs.map((log) => (
+            <div
+              key={log._id}
+              className="bg-gray-50 border p-4 rounded shadow-sm flex justify-between items-start"
+            >
+              <div>
+                <p className="text-sm font-medium text-gray-800">
+                  {format(parseISO(log.date), "PPP")}
+                </p>
+                <div className="flex flex-wrap gap-2 mt-1">
+                  {log.symptoms.map((symptom) => (
+                    <span
+                      key={symptom}
+                      className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded"
+                    >
+                      {symptom}
+                    </span>
+                  ))}
+                </div>
+                {log.notes && <p className="text-sm text-gray-600 mt-2 italic">📝 {log.notes}</p>}
+              </div>
+
+              {!isViewer && (
+                <div className="flex flex-col gap-2 text-sm mt-1">
+                  <button
+                    onClick={() => {
+                      setSelectedDate(log.date);
+                      setFormSymptoms(log.symptoms);
+                      setFormNote(log.notes || "");
+                      setEditId(log._id || null);
+                      setModalOpen(true);
+                    }}
+                    className="text-blue-600 hover:underline"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={async () => {
+                      setEditId(log._id || null);
+                      await handleDelete();
+                    }}
+                    className="text-red-600 hover:underline"
+                  >
+                    Delete
+                  </button>
+                </div>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+
       {modalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-30 z-50 flex items-center justify-center">
           <div className="bg-white p-6 rounded shadow-lg max-w-md w-full space-y-4">
             <h3 className="text-lg font-semibold mb-2">
-              {selectedDate && format(new Date(selectedDate), "PPP")}
+              {selectedDate && format(parseISO(selectedDate), "PPP")}
             </h3>
 
             <div className="flex flex-wrap gap-2">
@@ -225,18 +285,10 @@ export default function SymptomLog() {
             />
 
             <div className="flex justify-end gap-2 mt-4">
-              <button
-                onClick={() => {
-                  setModalOpen(false);
-                  setFormSymptoms([]);
-                  setFormNote("");
-                }}
-                className="text-sm px-4 py-2 rounded border"
-              >
+              <button onClick={closeModal} className="text-sm px-4 py-2 rounded border">
                 Close
               </button>
-
-              {!isViewer && logs.find((l) => l.date === selectedDate)?._id && (
+              {!isViewer && editId && (
                 <button
                   onClick={handleDelete}
                   className="text-sm px-4 py-2 text-red-600 hover:underline"
@@ -244,7 +296,6 @@ export default function SymptomLog() {
                   Delete
                 </button>
               )}
-
               {!isViewer && (
                 <button
                   onClick={handleSave}

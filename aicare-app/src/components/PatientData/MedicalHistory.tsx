@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { format } from "date-fns";
 import clsx from "clsx";
+import { useViewerContext } from "@/context/ViewerContext";
 
 type EntryType = "diagnosis" | "allergy" | "immunization" | "other";
 type EntryStatus = "active" | "resolved" | "unknown";
@@ -20,11 +21,12 @@ interface MedicalHistoryEntry {
 
 export default function MedicalHistory() {
   const { data: session } = useSession();
+  const { isViewer } = useViewerContext();
+
   const [entries, setEntries] = useState<MedicalHistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isViewer, setIsViewer] = useState(false);
-
   const [modalOpen, setModalOpen] = useState(false);
+
   const [form, setForm] = useState<Partial<MedicalHistoryEntry>>({
     type: "diagnosis",
     status: "active"
@@ -34,13 +36,7 @@ export default function MedicalHistory() {
     try {
       const res = await fetch("/api/patient-data/history");
       const data = await res.json();
-
       setEntries(data);
-
-      const selfEmail = session?.user?.email ?? "";
-      const isSharedData = data.length > 0 && data[0].userEmail !== selfEmail;
-
-      setIsViewer(isSharedData);
     } catch (err) {
       console.error("❌ Failed to fetch history:", err);
     } finally {
@@ -85,6 +81,7 @@ export default function MedicalHistory() {
     const res = await fetch(`/api/patient-data/history?id=${id}`, { method: "DELETE" });
     if (res.ok) fetchEntries();
   };
+
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
       <div className="flex justify-between items-center">

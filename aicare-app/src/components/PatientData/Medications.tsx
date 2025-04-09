@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { format } from "date-fns";
+import { useViewerContext } from "@/context/ViewerContext";
 
 type Medication = {
   _id?: string;
@@ -25,10 +26,10 @@ type Medication = {
 
 export default function Medications() {
   const { data: session } = useSession();
+  const { isViewer } = useViewerContext();
 
   const [medications, setMedications] = useState<Medication[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isViewer, setIsViewer] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
 
   const [form, setForm] = useState<Partial<Medication>>({
@@ -41,15 +42,24 @@ export default function Medications() {
     reminder: { enabled: false, times: [] }
   });
 
+  const buildViewerHeaders = (): Record<string, string> => {
+    const headers: Record<string, string> = {};
+    if (typeof window !== "undefined") {
+      const viewerEmail = localStorage.getItem("viewerEmail");
+      if (viewerEmail) {
+        headers["X-Viewer-Email"] = viewerEmail;
+      }
+    }
+    return headers;
+  };
+
   const fetchMedications = async () => {
     try {
-      const res = await fetch("/api/patient-data/medications");
+      const res = await fetch("/api/patient-data/medications", {
+        headers: buildViewerHeaders()
+      });
       const data = await res.json();
       setMedications(data);
-
-      if (data.length > 0 && session?.user?.email && data[0].userEmail !== session.user.email) {
-        setIsViewer(true);
-      }
     } catch (err) {
       console.error("❌ Failed to load medications:", err);
     } finally {
@@ -59,7 +69,7 @@ export default function Medications() {
 
   useEffect(() => {
     fetchMedications();
-  }, [session]);
+  }, [session, isViewer]);
 
   const handleFormChange = (
     field: keyof Medication,
@@ -86,7 +96,10 @@ export default function Medications() {
     const isEdit = !!form._id;
     const res = await fetch("/api/patient-data/medications", {
       method: isEdit ? "PUT" : "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...buildViewerHeaders()
+      },
       body: JSON.stringify(form)
     });
 
@@ -109,10 +122,12 @@ export default function Medications() {
     if (isViewer) return;
 
     const res = await fetch(`/api/patient-data/medications?id=${_id}`, {
-      method: "DELETE"
+      method: "DELETE",
+      headers: buildViewerHeaders()
     });
     if (res.ok) fetchMedications();
   };
+
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div className="flex justify-between items-center">
@@ -247,7 +262,6 @@ export default function Medications() {
               />
               <input
                 type="date"
-                placeholder="End Date"
                 value={form.endDate ?? ""}
                 onChange={(e) => handleFormChange("endDate", e.target.value)}
                 className="border p-2 rounded w-1/2"

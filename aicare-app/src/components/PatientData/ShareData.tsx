@@ -42,7 +42,6 @@ export default function ShareData() {
   const [sharedPatients, setSharedPatients] = useState<SharedPatient[]>([]);
   const [activePatientId, setActivePatientId] = useState<string | null>(null);
 
-  // Load viewer access (only after invite is accepted)
   useEffect(() => {
     const tryFetchViewerAccess = async () => {
       if (!session?.user?.email) return;
@@ -52,16 +51,18 @@ export default function ShareData() {
         const shared = await result.json();
         if (Array.isArray(shared) && shared.length > 0) {
           setSharedPatients(shared);
-          setIsViewer(true);
 
           const saved = localStorage.getItem("activePatientId");
           const found = shared.find((p: SharedPatient) => p._id === saved);
 
           if (saved && found) {
             setActivePatientId(saved);
+            setIsViewer(true);
+            localStorage.setItem("viewerEmail", found.email);
           } else {
-            // Do not auto-select — leave dropdown empty and wait for user input
             setActivePatientId(null);
+            setIsViewer(false);
+            localStorage.removeItem("viewerEmail");
           }
         }
       }
@@ -73,7 +74,6 @@ export default function ShareData() {
     tryFetchViewerAccess();
   }, [session]);
 
-  // Handle user search
   useEffect(() => {
     const fetchUsers = async () => {
       if (searchQuery.length < 2) return setSearchResults([]);
@@ -91,6 +91,7 @@ export default function ShareData() {
     const debounce = setTimeout(fetchUsers, 300);
     return () => clearTimeout(debounce);
   }, [searchQuery]);
+
   const fetchInvites = async () => {
     try {
       const res = await fetch("/api/patient-data/invites");
@@ -158,10 +159,6 @@ export default function ShareData() {
           const shared = await result.json();
           if (Array.isArray(shared)) {
             setSharedPatients(shared);
-            // Only show dropdown; wait for user to pick a patient
-            if (shared.length > 0) {
-              setIsViewer(true);
-            }
           }
         }
       }
@@ -181,7 +178,7 @@ export default function ShareData() {
       });
 
       if (res.ok) {
-        fetchInvites(); // Refresh list
+        fetchInvites();
         setMessage({ type: "success", text: `Access revoked for ${viewerEmail}` });
       } else {
         const data = await res.json();
@@ -189,6 +186,25 @@ export default function ShareData() {
       }
     } catch {
       setMessage({ type: "error", text: "Something went wrong while revoking access." });
+    }
+  };
+
+  const handleViewerToggle = (id: string) => {
+    if (id === "__self__") {
+      localStorage.removeItem("activePatientId");
+      localStorage.removeItem("viewerEmail");
+      document.cookie = `activePatientId=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+      setActivePatientId(null);
+      setIsViewer(false);
+    } else {
+      const selected = sharedPatients.find((p) => p._id === id);
+      if (selected) {
+        localStorage.setItem("activePatientId", id);
+        localStorage.setItem("viewerEmail", selected.email);
+        document.cookie = `activePatientId=${id}; path=/`;
+        setActivePatientId(id);
+        setIsViewer(true);
+      }
     }
   };
 
@@ -203,21 +219,7 @@ export default function ShareData() {
         <select
           className="w-full border rounded p-2 bg-white shadow-sm text-gray-800"
           value={activePatientId ?? "__self__"}
-          onChange={(e) => {
-            const id = e.target.value;
-            if (id === "__self__") {
-              localStorage.removeItem("activePatientId");
-              document.cookie = `activePatientId=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
-              setActivePatientId(null);
-              setIsViewer(false);
-              return;
-            }
-
-            setActivePatientId(id);
-            localStorage.setItem("activePatientId", id);
-            document.cookie = `activePatientId=${id}; path=/`;
-            setIsViewer(true);
-          }}
+          onChange={(e) => handleViewerToggle(e.target.value)}
         >
           <option value="__self__">👤 Your Own Data</option>
           {sharedPatients.map((patient) => (
