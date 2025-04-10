@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, ChangeEvent } from "react";
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 
@@ -23,8 +23,11 @@ import type { ChatThread } from "@/types/chatbot";
 export default function Dashboard() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [activeFeature, setActiveFeature] = useState<string>("dashboard");
+  const [initialized, setInitialized] = useState(false);
+
   const [threads, setThreads] = useState<ChatThread[]>([]);
 
   const [profileData, setProfileData] = useState<UserProfile | null>(null);
@@ -40,6 +43,14 @@ export default function Dashboard() {
   const scrollToBottomOfDashboard = () => {
     dashboardScrollRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   };
+
+  useEffect(() => {
+    const section = searchParams?.get("section");
+    if (section && !initialized) {
+      setActiveFeature(section);
+      setInitialized(true);
+    }
+  }, [searchParams, initialized]);
 
   const fetchProfile = async () => {
     try {
@@ -194,7 +205,7 @@ export default function Dashboard() {
 
               <PatientProfile
                 {...profileData}
-                pregnant={profileData.isPregnant}
+                isPregnant={profileData.isPregnant}
                 handleChange={handleProfileChange}
                 handlePregnantChange={handlePregnantChange}
                 editable={true}

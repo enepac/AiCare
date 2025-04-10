@@ -4,34 +4,17 @@ import Link from "next/link";
 import { signOut, useSession } from "next-auth/react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import type { UserProfile } from "@/types/UserProfile";
 
 export const Navbar = () => {
   const { data: session } = useSession();
   const router = useRouter();
-  const [profileComplete, setProfileComplete] = useState<boolean>(false);
-
-  useEffect(() => {
-    async function checkProfile() {
-      const res = await fetch("/api/profile");
-      if (res.ok) {
-        const data: UserProfile = await res.json();
-        setProfileComplete(data.isProfileComplete);
-      }
-    }
-
-    if (session) {
-      checkProfile();
-    }
-  }, [session]);
 
   const handleProfileClick = () => {
-    if (profileComplete) {
-      router.push("/dashboard?section=profile");
-    } else {
-      router.push("/profile");
-    }
+    router.push("/profile");
+  };
+
+  const handleAssessmentClick = () => {
+    router.push("/dashboard?section=chatbot");
   };
 
   const handleLogout = async () => {
@@ -53,9 +36,9 @@ export const Navbar = () => {
             Profile
           </button>
 
-          <Link href="/assessment" className="hover:text-gray-300">
+          <button onClick={handleAssessmentClick} className="hover:text-gray-300">
             Smart Assessment
-          </Link>
+          </button>
 
           {session && session.user && (
             <div className="flex items-center space-x-3">
