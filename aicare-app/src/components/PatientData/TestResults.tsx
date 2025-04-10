@@ -39,14 +39,16 @@ export default function TestResults() {
   });
 
   useEffect(() => {
-    const syncViewerEmail = () => {
-      const email = localStorage.getItem("viewerEmail");
-      setViewerEmail(email || null);
-    };
+    if (typeof window !== "undefined") {
+      const syncViewerEmail = () => {
+        const email = localStorage.getItem("viewerEmail");
+        setViewerEmail(email || null);
+      };
 
-    syncViewerEmail();
-    window.addEventListener("storage", syncViewerEmail);
-    return () => window.removeEventListener("storage", syncViewerEmail);
+      syncViewerEmail();
+      window.addEventListener("storage", syncViewerEmail);
+      return () => window.removeEventListener("storage", syncViewerEmail);
+    }
   }, []);
 
   const buildViewerHeaders = (): Record<string, string> => {

@@ -109,7 +109,9 @@ export default function Profile() {
     errors[field] && <p className="text-red-600 text-sm">{errors[field]}</p>;
 
   return (
-    <div className="space-y-6 max-w-2xl mx-auto">
+    <div
+      className={`space-y-6 max-w-2xl mx-auto ${isViewer ? "opacity-75 pointer-events-none" : ""}`}
+    >
       <h2 className="text-xl font-semibold text-gray-800">Patient Profile</h2>
 
       {isViewer && (
@@ -280,17 +282,19 @@ export default function Profile() {
         )}
       </div>
 
-      <div className="flex gap-4 items-center">
-        <button
-          onClick={handleSave}
-          disabled={saving || isViewer}
-          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
-        >
-          {saving ? "Saving..." : "Save Profile"}
-        </button>
+      {!isViewer && (
+        <div className="flex gap-4 items-center">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+          >
+            {saving ? "Saving..." : "Save Profile"}
+          </button>
 
-        {saveMessage && <p className="text-sm text-gray-700">{saveMessage}</p>}
-      </div>
+          {saveMessage && <p className="text-sm text-gray-700">{saveMessage}</p>}
+        </div>
+      )}
     </div>
   );
 }

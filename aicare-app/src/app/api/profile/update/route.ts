@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "../../../../lib/authOptions";
-import User from "@/models/user";
+import { authOptions } from "@/lib/authOptions";
 import { dbConnect } from "@/lib/mongodb";
+import User from "@/models/user";
+import { getScopedEmail } from "@/lib/utils/viewerScope";
 
 export async function PATCH(req: NextRequest) {
   try {
@@ -14,7 +15,12 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { email } = session.user;
+    const { email: sessionEmail } = session.user;
+    const scopedEmail = await getScopedEmail(req);
+
+    if (!scopedEmail || scopedEmail !== sessionEmail) {
+      return NextResponse.json({ error: "Forbidden: Viewers cannot update profile" }, { status: 403 });
+    }
 
     if (!req.body) {
       console.log("❌ Empty request body");
@@ -90,7 +96,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     // ✅ Fetch current user data
-    const existingUser = await User.findOne({ email });
+    const existingUser = await User.findOne({ email: sessionEmail });
 
     if (!existingUser) {
       console.log("❌ User not found in database");
@@ -99,7 +105,6 @@ export async function PATCH(req: NextRequest) {
 
     // ✅ Update completed profile steps
     const completedSteps = new Set(existingUser.profileCompletionSteps);
-
     Object.keys(filteredUpdates).forEach((key) => {
       if (filteredUpdates[key as ProfileFields]) {
         completedSteps.add(key);
@@ -108,7 +113,7 @@ export async function PATCH(req: NextRequest) {
 
     // ✅ Perform MongoDB Update
     const updatedUser = await User.findOneAndUpdate(
-      { email },
+      { email: sessionEmail },
       {
         $set: {
           ...filteredUpdates,

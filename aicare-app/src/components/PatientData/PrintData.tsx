@@ -1,6 +1,5 @@
 "use client";
 
-import html2pdf from "html2pdf.js";
 import { useRef, useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 
@@ -85,8 +84,6 @@ export default function PrintData() {
   };
 
   const handleDownloadPDF = () => {
-    if (!printRef.current) return;
-
     const opt = {
       margin: 0.5,
       filename: `AiCare_PrintData_${new Date().toISOString().split("T")[0]}.pdf`,
@@ -95,15 +92,23 @@ export default function PrintData() {
       jsPDF: { unit: "in", format: "letter", orientation: "portrait" }
     };
 
-    html2pdf().from(printRef.current).set(opt).save();
+    const runDownload = async () => {
+      if (typeof window === "undefined" || !printRef.current) return;
+      const html2pdf = (await import("html2pdf.js")).default;
+      html2pdf().set(opt).from(printRef.current as HTMLElement).save();
+    };
+
+    runDownload();
   };
 
-  const handlePrintPDF = () => {
-    if (!printRef.current) return;
+  const handlePrint = async () => {
+    if (typeof window === "undefined" || !printRef.current) return;
+
+    const html2pdf = (await import("html2pdf.js")).default;
 
     const opt = {
       margin: 0.5,
-      filename: `AiCare_PrintData_${new Date().toISOString().split("T")[0]}.pdf`,
+      filename: "health-report.pdf",
       image: { type: "jpeg", quality: 0.98 },
       html2canvas: { scale: 2 },
       jsPDF: { unit: "in", format: "letter", orientation: "portrait" }
@@ -111,8 +116,8 @@ export default function PrintData() {
 
     html2pdf()
       .set(opt)
-      .from(printRef.current)
-      // @ts-expect-error: toPdf() is a valid runtime method but missing in typings
+      .from(printRef.current as HTMLElement)
+      // @ts-expect-error
       .toPdf()
       .get("pdf")
       .then((pdf: unknown) => {
@@ -121,9 +126,7 @@ export default function PrintData() {
         const blobURL = URL.createObjectURL(blob);
         const printWindow = window.open(blobURL);
         if (printWindow) {
-          printWindow.onload = () => {
-            printWindow.print();
-          };
+          printWindow.onload = () => printWindow.print();
         }
       });
   };
@@ -138,7 +141,7 @@ export default function PrintData() {
         {!isViewer && (
           <div className="flex gap-2">
             <button
-              onClick={handlePrintPDF}
+              onClick={handlePrint}
               className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
             >
               Print
@@ -185,30 +188,12 @@ export default function PrintData() {
               <h3 className="text-lg font-semibold border-b pb-1 mb-2">Patient Profile</h3>
               <table className="w-full text-sm text-left">
                 <tbody className="divide-y divide-gray-200">
-                  <tr>
-                    <td className="font-medium w-40">Name</td>
-                    <td>{profile.name}</td>
-                  </tr>
-                  <tr>
-                    <td className="font-medium">Age</td>
-                    <td>{profile.age}</td>
-                  </tr>
-                  <tr>
-                    <td className="font-medium">Gender</td>
-                    <td>{profile.gender}</td>
-                  </tr>
-                  <tr>
-                    <td className="font-medium">Blood Type</td>
-                    <td>{profile.bloodType}</td>
-                  </tr>
-                  <tr>
-                    <td className="font-medium">Height</td>
-                    <td>{profile.height} cm</td>
-                  </tr>
-                  <tr>
-                    <td className="font-medium">Weight</td>
-                    <td>{profile.weight} kg</td>
-                  </tr>
+                  <tr><td className="font-medium w-40">Name</td><td>{profile.name}</td></tr>
+                  <tr><td className="font-medium">Age</td><td>{profile.age}</td></tr>
+                  <tr><td className="font-medium">Gender</td><td>{profile.gender}</td></tr>
+                  <tr><td className="font-medium">Blood Type</td><td>{profile.bloodType}</td></tr>
+                  <tr><td className="font-medium">Height</td><td>{profile.height} cm</td></tr>
+                  <tr><td className="font-medium">Weight</td><td>{profile.weight} kg</td></tr>
                 </tbody>
               </table>
             </div>
@@ -220,8 +205,7 @@ export default function PrintData() {
               <ul className="text-sm text-gray-800 list-disc pl-5">
                 {medications.map((m) => (
                   <li key={m._id}>
-                    {m.name} ({m.dosageAmount}
-                    {m.dosageUnit}) – {m.frequency}
+                    {m.name} ({m.dosageAmount}{m.dosageUnit}) – {m.frequency}
                   </li>
                 ))}
               </ul>

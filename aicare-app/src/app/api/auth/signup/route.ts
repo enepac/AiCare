@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { dbConnect } from "@/lib/mongodb";
 import User from "@/models/user";
-import SharedAccess from "@/models/SharedAccess";
+import { SharedAccess } from "@/models/SharedAccess";
 import bcrypt from "bcryptjs";
 import { validatePassword } from "@/utils/validation";
 

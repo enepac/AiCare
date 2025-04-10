@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/authOptions";
-import SharedAccess from "@/models/SharedAccess";
+import { SharedAccess } from "@/models/SharedAccess";
 import { dbConnect } from "@/lib/mongodb";
 
 export async function POST(req: NextRequest) {

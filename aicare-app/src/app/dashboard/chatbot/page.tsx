@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { useEffect, useState } from "react";
 import ChatbotWidget from "@/components/ChatbotWidget";
 import type { ChatThread } from "@/types/chatbot";

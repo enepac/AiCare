@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { dbConnect } from "@/lib/mongodb";
-import SharedAccess from "@/models/SharedAccess";
+import { SharedAccess } from "@/models/SharedAccess";
 
 export async function POST(req: NextRequest) {
   const token = await getToken({ req });

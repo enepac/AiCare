@@ -27,22 +27,38 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
+  // 🔒 Defensive check for missing emails
+  if (!viewer.email || !owner.email) {
+    console.error("❌ Missing ownerEmail or viewerEmail", {
+      ownerEmail: owner.email,
+      viewerEmail: viewer.email,
+    });
+    return NextResponse.json({ error: "Missing email addresses" }, { status: 400 });
+  }
+
   try {
     const existing = await SharedAccess.findOne({
       ownerId: owner._id,
-      viewerId: viewer._id
+      viewerId: viewer._id,
     });
 
     if (existing) {
       return NextResponse.json({ error: "Access already shared" }, { status: 409 });
     }
 
+    console.log("📨 Creating SharedAccess entry:", {
+      ownerId: owner._id,
+      ownerEmail: owner.email,
+      viewerId: viewer._id,
+      viewerEmail: viewer.email,
+    });
+
     await SharedAccess.create({
       ownerId: owner._id,
       ownerEmail: owner.email,
       viewerId: viewer._id,
       viewerEmail: viewer.email,
-      status: "pending"
+      status: "pending",
     });
 
     return NextResponse.json({ message: "Access invite sent." });

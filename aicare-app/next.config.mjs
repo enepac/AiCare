@@ -12,14 +12,14 @@ const nextConfig = {
     // Enable any future Next.js experimental features here
   },
   env: {
-    PORT: "4000",
-    NEXT_PUBLIC_PORT: "4000"
+    PORT: "5000",
+    NEXT_PUBLIC_PORT: "5000"
   },
   serverRuntimeConfig: {
-    port: process.env.PORT || 4000
+    port: process.env.PORT || 5000
   },
   publicRuntimeConfig: {
-    port: process.env.NEXT_PUBLIC_PORT || 4000
+    port: process.env.NEXT_PUBLIC_PORT || 5000
   }
 };
 
