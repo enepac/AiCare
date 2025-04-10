@@ -124,8 +124,11 @@ export default function TestResults() {
       }
     }
 
+    const isEdit = !!form._id;
+    const method = isEdit ? "PUT" : "POST";
+
     const res = await fetch("/api/patient-data/tests", {
-      method: "POST",
+      method,
       headers: {
         "Content-Type": "application/json",
         ...buildViewerHeaders()
@@ -141,6 +144,26 @@ export default function TestResults() {
       const error = await res.json();
       console.error("❌ Failed to save test result:", error.message);
       alert("Failed to save test result. See console for details.");
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (isViewer) return;
+    const confirmed = confirm("Are you sure you want to delete this test result?");
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch(`/api/patient-data/tests?id=${id}`, {
+        method: "DELETE",
+        headers: buildViewerHeaders()
+      });
+      if (res.ok) {
+        fetchResults();
+      } else {
+        console.error("❌ Delete failed");
+      }
+    } catch (err) {
+      console.error("❌ Error deleting test result:", err);
     }
   };
 
@@ -218,6 +241,26 @@ export default function TestResults() {
                   <span className="text-[10px] text-blue-500 bg-blue-100 px-2 py-1 rounded-full mt-1">
                     Parsed by AI
                   </span>
+                )}
+
+                {!isViewer && (
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      onClick={() => {
+                        setForm(res);
+                        setModalOpen(true);
+                      }}
+                      className="text-sm text-blue-600 hover:underline"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => res._id && handleDelete(res._id)}
+                      className="text-sm text-red-600 hover:underline"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 )}
               </div>
             </div>

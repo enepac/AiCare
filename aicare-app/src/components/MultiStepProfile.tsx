@@ -58,7 +58,7 @@ export default function MultiStepProfile() {
     let updatedValue: string | number | boolean | null = value;
 
     if (["age", "height", "weight"].includes(name)) {
-      updatedValue = Number(value);
+      updatedValue = value === "" ? null : Number(value);
     } else if (name === "isPregnant") {
       updatedValue = value === "true";
     }
@@ -155,7 +155,7 @@ export default function MultiStepProfile() {
                   <input
                     type="number"
                     name="age"
-                    value={profile.age}
+                    value={profile.age || ""}
                     onChange={handleChange}
                     className="w-full p-2 mb-3 border rounded focus:ring-2 focus:ring-indigo-400"
                   />
@@ -167,10 +167,10 @@ export default function MultiStepProfile() {
                     onChange={handleChange}
                     className="w-full p-2 mb-3 border rounded focus:ring-2 focus:ring-indigo-400"
                   >
-                    <option>Select Gender</option>
-                    <option>Male</option>
-                    <option>Female</option>
-                    <option>Other</option>
+                    <option value="">Select Gender</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
                   </select>
 
                   {profile.gender === "Female" && (
@@ -189,6 +189,7 @@ export default function MultiStepProfile() {
                   )}
                 </>
               )}
+
               {step === 1 && (
                 <>
                   <label className="block text-sm text-gray-700">Height (cm)</label>
@@ -223,13 +224,22 @@ export default function MultiStepProfile() {
               {step === 2 && (
                 <>
                   <label className="block text-sm text-gray-700">Blood Type</label>
-                  <input
-                    type="text"
+                  <select
                     name="bloodType"
                     value={profile.bloodType}
                     onChange={handleChange}
                     className="w-full p-2 mb-3 border rounded focus:ring-2 focus:ring-indigo-400"
-                  />
+                  >
+                    <option value="">Select Blood Type</option>
+                    <option value="A+">A+</option>
+                    <option value="A-">A-</option>
+                    <option value="B+">B+</option>
+                    <option value="B-">B-</option>
+                    <option value="O+">O+</option>
+                    <option value="O-">O-</option>
+                    <option value="AB+">AB+</option>
+                    <option value="AB-">AB-</option>
+                  </select>
 
                   <label className="block text-sm text-gray-700">Allergies</label>
                   <input

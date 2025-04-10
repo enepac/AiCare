@@ -93,14 +93,27 @@ export default function Medications() {
   const handleSubmit = async () => {
     if (isViewer) return;
 
+    // ✅ Client-side validation
+    if (!form.name || !form.dosageAmount || !form.frequency || !form.startDate) {
+      alert("Please fill in all required fields: name, dosage, frequency, and start date.");
+      return;
+    }
+
     const isEdit = !!form._id;
+
+    const payload: Partial<Medication> = {
+      ...form,
+      startDate: new Date(form.startDate!).toISOString().slice(0, 10),
+      endDate: form.endDate ? new Date(form.endDate).toISOString().slice(0, 10) : undefined
+    };
+
     const res = await fetch("/api/patient-data/medications", {
       method: isEdit ? "PUT" : "POST",
       headers: {
         "Content-Type": "application/json",
         ...buildViewerHeaders()
       },
-      body: JSON.stringify(form)
+      body: JSON.stringify(payload)
     });
 
     if (res.ok) {
@@ -115,6 +128,9 @@ export default function Medications() {
         status: "active",
         reminder: { enabled: false, times: [] }
       });
+    } else {
+      const errMsg = await res.json().then((d) => d.error || "Unknown error");
+      alert("❌ Failed to save medication: " + errMsg);
     }
   };
 

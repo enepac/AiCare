@@ -337,7 +337,7 @@ export default function ChatbotWidget({
         <div
           className={clsx(
             "p-4 flex items-center gap-2 border-t bg-white",
-            messages.length === 0 ? "mt-auto" : "sticky bottom-0 z-10"
+            messages.length === 0 ? "mt-auto" : "sticky bottom-0 z-10 mb-5"
           )}
         >
           <input

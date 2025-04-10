@@ -9,7 +9,8 @@
       "@/models/*": ["src/models/*"],
       "@/middleware/*": ["src/middleware/*"],
       "@components/*": ["src/components/*"],
-      "@/lib/*": ["src/lib/*"]
+      "@/lib/*": ["src/lib/*"],
+      "*": ["types/*"]
       // "next-auth/*": ["node_modules/next-auth/*"] // ❌ Removed or commented out
     },
     "experimentalDecorators": true,
@@ -50,7 +51,7 @@
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
-    "next-env.d.ts"
+    "next-env.d.ts"  
   ],
   "exclude": ["node_modules", ".next", "dist", ".turbo", "backend", "**/*.test.ts"]
 }

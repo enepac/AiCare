@@ -37,7 +37,8 @@ export async function PATCH(req: NextRequest) {
       | "weight"
       | "bmi"
       | "bloodType"
-      | "isPregnant";
+      | "isPregnant"
+      | "expectedDeliveryDate";
 
     const allowedFields: ProfileFields[] = [
       "age",
@@ -51,8 +52,16 @@ export async function PATCH(req: NextRequest) {
       "weight",
       "bmi",
       "bloodType",
-      "isPregnant"
+      "isPregnant",
+      "expectedDeliveryDate"
     ];
+
+    // ✅ Trim all string inputs before processing
+    Object.keys(updatedData).forEach((key) => {
+      if (typeof updatedData[key] === "string") {
+        updatedData[key] = updatedData[key].trim();
+      }
+    });
 
     // ✅ Convert isPregnant from string to boolean
     if (updatedData.isPregnant !== undefined) {

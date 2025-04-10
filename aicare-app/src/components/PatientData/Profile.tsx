@@ -31,6 +31,8 @@ export default function Profile() {
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
 
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
   const fetchProfile = async () => {
     try {
       const res = await fetch("/api/profile");
@@ -50,6 +52,31 @@ export default function Profile() {
 
   const handleChange = (field: keyof UserProfile, value: string | number | boolean | undefined) => {
     if (isViewer) return;
+
+    let error = "";
+
+    const isValidNumber = (val: unknown, min: number, max: number): val is number =>
+      typeof val === "number" && !isNaN(val) && val >= min && val <= max;
+
+    if (field === "age" && !isValidNumber(value, 0, 120)) {
+      error = "Age must be between 0 and 120";
+    } else if (field === "height" && !isValidNumber(value, 30, 300)) {
+      error = "Height must be between 30 and 300 cm";
+    } else if (field === "weight" && !isValidNumber(value, 1, 500)) {
+      error = "Weight must be between 1 and 500 kg";
+    } else if (field === "bmi" && !isValidNumber(value, 10, 100)) {
+      error = "BMI must be between 10 and 100";
+    } else if (
+      ["bloodType", "allergies", "medications", "familyHistory", "activityLevel", "diet"].includes(
+        field
+      )
+    ) {
+      if (!value || typeof value !== "string" || value.trim() === "") {
+        error = `${field[0].toUpperCase() + field.slice(1)} is required`;
+      }
+    }
+
+    setErrors((prev) => ({ ...prev, [field]: error }));
     setProfile((prev) => (prev ? { ...prev, [field]: value } : prev));
   };
 
@@ -57,12 +84,14 @@ export default function Profile() {
     if (!profile || isViewer) return;
     setSaving(true);
     setSaveMessage("");
+
     try {
-      const res = await fetch("/api/profile", {
-        method: "POST",
+      const res = await fetch("/api/profile/update", {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(profile)
       });
+
       if (!res.ok) throw new Error("Failed to save profile");
       setSaveMessage("✅ Profile saved successfully.");
     } catch (err) {
@@ -76,6 +105,9 @@ export default function Profile() {
   if (loading) return <p>Loading profile...</p>;
   if (!profile) return <p>Could not load profile.</p>;
 
+  const renderError = (field: string) =>
+    errors[field] && <p className="text-red-600 text-sm">{errors[field]}</p>;
+
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
       <h2 className="text-xl font-semibold text-gray-800">Patient Profile</h2>
@@ -87,107 +119,141 @@ export default function Profile() {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <input
-          type="text"
-          placeholder="Full Name"
-          value={profile.name}
-          onChange={(e) => handleChange("name", e.target.value)}
-          className="border p-2 rounded w-full"
-          disabled={isViewer}
-        />
+        <div>
+          <input
+            type="text"
+            placeholder="Full Name"
+            value={profile.name}
+            onChange={(e) => handleChange("name", e.target.value)}
+            className="border p-2 rounded w-full"
+            disabled={isViewer}
+          />
+        </div>
 
-        <input
-          type="number"
-          placeholder="Age"
-          value={profile.age ?? ""}
-          onChange={(e) => handleChange("age", Number(e.target.value))}
-          className="border p-2 rounded w-full"
-          disabled={isViewer}
-        />
+        <div>
+          <input
+            type="number"
+            placeholder="Age"
+            value={profile.age ?? ""}
+            onChange={(e) => handleChange("age", e.target.value)}
+            className="border p-2 rounded w-full"
+            disabled={isViewer}
+          />
+          {renderError("age")}
+        </div>
 
-        <select
-          value={profile.gender ?? ""}
-          onChange={(e) => handleChange("gender", e.target.value)}
-          className="border p-2 rounded w-full"
-          disabled={isViewer}
-        >
-          <option value="">Select Gender</option>
-          <option value="Male">Male</option>
-          <option value="Female">Female</option>
-          <option value="Other">Other</option>
-        </select>
+        <div>
+          <select
+            value={profile.gender ?? ""}
+            onChange={(e) => handleChange("gender", e.target.value)}
+            className="border p-2 rounded w-full"
+            disabled={isViewer}
+          >
+            <option value="">Select Gender</option>
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
 
-        <input
-          type="number"
-          placeholder="Height (cm)"
-          value={profile.height ?? ""}
-          onChange={(e) => handleChange("height", Number(e.target.value))}
-          className="border p-2 rounded w-full"
-          disabled={isViewer}
-        />
+        <div>
+          <input
+            type="number"
+            placeholder="Height (cm)"
+            value={profile.height ?? ""}
+            onChange={(e) => handleChange("height", e.target.value)}
+            className="border p-2 rounded w-full"
+            disabled={isViewer}
+          />
+          {renderError("height")}
+        </div>
 
-        <input
-          type="number"
-          placeholder="Weight (kg)"
-          value={profile.weight ?? ""}
-          onChange={(e) => handleChange("weight", Number(e.target.value))}
-          className="border p-2 rounded w-full"
-          disabled={isViewer}
-        />
+        <div>
+          <input
+            type="number"
+            placeholder="Weight (kg)"
+            value={profile.weight ?? ""}
+            onChange={(e) => handleChange("weight", e.target.value)}
+            className="border p-2 rounded w-full"
+            disabled={isViewer}
+          />
+          {renderError("weight")}
+        </div>
 
-        <input
-          type="text"
-          placeholder="Blood Type"
-          value={profile.bloodType ?? ""}
-          onChange={(e) => handleChange("bloodType", e.target.value)}
-          className="border p-2 rounded w-full"
-          disabled={isViewer}
-        />
+        <div>
+          <label className="sr-only">Blood Type</label>
+          <select
+            value={profile.bloodType ?? ""}
+            onChange={(e) => handleChange("bloodType", e.target.value)}
+            className="border p-2 rounded w-full"
+            disabled={isViewer}
+          >
+            <option value="">Select Blood Type</option>
+            <option value="A+">A+</option>
+            <option value="A-">A-</option>
+            <option value="B+">B+</option>
+            <option value="B-">B-</option>
+            <option value="O+">O+</option>
+            <option value="O-">O-</option>
+            <option value="AB+">AB+</option>
+            <option value="AB-">AB-</option>
+          </select>
+        </div>
 
-        <input
-          type="text"
-          placeholder="Allergies"
-          value={profile.allergies ?? ""}
-          onChange={(e) => handleChange("allergies", e.target.value)}
-          className="border p-2 rounded w-full"
-          disabled={isViewer}
-        />
+        <div>
+          <input
+            type="text"
+            placeholder="Allergies"
+            value={profile.allergies ?? ""}
+            onChange={(e) => handleChange("allergies", e.target.value)}
+            className="border p-2 rounded w-full"
+            disabled={isViewer}
+          />
+        </div>
 
-        <input
-          type="text"
-          placeholder="Medications"
-          value={profile.medications ?? ""}
-          onChange={(e) => handleChange("medications", e.target.value)}
-          className="border p-2 rounded w-full"
-          disabled={isViewer}
-        />
+        <div>
+          <input
+            type="text"
+            placeholder="Medications"
+            value={profile.medications ?? ""}
+            onChange={(e) => handleChange("medications", e.target.value)}
+            className="border p-2 rounded w-full"
+            disabled={isViewer}
+          />
+        </div>
 
-        <input
-          type="text"
-          placeholder="Family History"
-          value={profile.familyHistory ?? ""}
-          onChange={(e) => handleChange("familyHistory", e.target.value)}
-          className="border p-2 rounded w-full"
-          disabled={isViewer}
-        />
+        <div>
+          <input
+            type="text"
+            placeholder="Family History"
+            value={profile.familyHistory ?? ""}
+            onChange={(e) => handleChange("familyHistory", e.target.value)}
+            className="border p-2 rounded w-full"
+            disabled={isViewer}
+          />
+        </div>
 
-        <input
-          type="text"
-          placeholder="Activity Level"
-          value={profile.activityLevel ?? ""}
-          onChange={(e) => handleChange("activityLevel", e.target.value)}
-          className="border p-2 rounded w-full"
-          disabled={isViewer}
-        />
+        <div>
+          <input
+            type="text"
+            placeholder="Activity Level"
+            value={profile.activityLevel ?? ""}
+            onChange={(e) => handleChange("activityLevel", e.target.value)}
+            className="border p-2 rounded w-full"
+            disabled={isViewer}
+          />
+        </div>
 
-        <input
-          type="text"
-          placeholder="Diet"
-          value={profile.diet ?? ""}
-          onChange={(e) => handleChange("diet", e.target.value)}
-          className="border p-2 rounded w-full"
-          disabled={isViewer}
-        />
+        <div>
+          <input
+            type="text"
+            placeholder="Diet"
+            value={profile.diet ?? ""}
+            onChange={(e) => handleChange("diet", e.target.value)}
+            className="border p-2 rounded w-full"
+            disabled={isViewer}
+          />
+        </div>
 
         {profile.gender === "Female" && (
           <div className="col-span-2 space-y-2">
