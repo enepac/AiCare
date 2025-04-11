@@ -4,30 +4,30 @@
 
 ---
 
-## 📦 Features
+##  Features
 
-### 🧠 AI-Assisted Medical Records
+###  AI-Assisted Medical Records
 - Upload medical files (PDF, DOCX, scans)
 - AWS Textract & Tesseract OCR fallback
 - GPT analyzes content and structures it into conditions, diagnosis, medications
 
-### 💬 Smart Chatbot
+###  Smart Chatbot
 - Conversational AI using OpenAI GPT
 - Scoped to patient data from MongoDB
 - Viewer-aware: shared users can query shared records only
 
-### 🩺 Patient Health Tracker
+###  Patient Health Tracker
 - Profile Setup (lifestyle, vitals, allergies)
 - Medical History, Appointments, Medications
 - Symptom Logging, Test Results, Procedures
 - Print and Share data modules
 
-### 🔄 Viewer Access System
+###  Viewer Access System
 - Users can share access with others
 - Shared users see read-only versions
 - Toggle between own data and shared patient profiles
 
-### 🐳 Docker + Render Deployment
+###  Docker + Render Deployment
 - Fully containerized Docker build
 - OCR tools installed (`tesseract`, `poppler-utils`)
 - Hosted via [Render.com](https://render.com/)
@@ -35,7 +35,7 @@
 
 ---
 
-## ⚙️ Tech Stack
+##  Tech Stack
 
 | Layer         | Stack/Tools                                   |
 |---------------|-----------------------------------------------|
@@ -49,7 +49,7 @@
 
 ---
 
-## 🧩 Directory Structure (Simplified)
+##  Directory Structure (Simplified)
 
 ```
 /src
@@ -80,7 +80,7 @@
 
 ---
 
-## 🚀 Quick Start (Local)
+##  Quick Start (Local)
 
 ```bash
 # Clone repo
@@ -102,7 +102,7 @@ npm run dev
 
 ---
 
-## 🐳 Docker
+##  Docker
 
 ```bash
 # Build Docker image
@@ -118,7 +118,7 @@ Dockerfile uses `node:18-slim` and installs:
 
 ---
 
-## 🔐 Security & Privacy
+##  Security & Privacy
 
 - JWT-secured routes with `next-auth`
 - Scoped access via `getScopedEmail()`
@@ -128,7 +128,7 @@ Dockerfile uses `node:18-slim` and installs:
 
 ---
 
-## ✅ Testing & Scripts
+##  Testing & Scripts
 
 ```bash
 npm run lint
@@ -139,7 +139,7 @@ npm run dev:socket # Realtime dev server
 
 ---
 
-## 🧠 AI Architecture
+##  AI Architecture
 
 - `generateSchemaContext()` dynamically builds MongoDB prompt context
 - Injected into GPT system messages for thread-aware AI answers
@@ -147,13 +147,13 @@ npm run dev:socket # Realtime dev server
 
 ---
 
-## 📖 License
+##  License
 
 MIT © [enepac](https://github.com/enepac)
 
 ---
 
-## ✨ Credits
+##  Credits
 
 AiCare is a personal AI health companion built by software engineers with a passion for healthcare and usability.
 
