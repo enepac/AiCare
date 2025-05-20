@@ -1,6 +1,6 @@
 # AirCare 🌬️
 
-**Live Demo**: [https://aircare-app.space](https://aircare-app.space)
+**Live Demo**: [https://aicare-app.space/)
 
 ## 🧠 About This Project
 AirCare is a web application that allows users to [briefly describe what your app does—e.g., monitor air quality, search locations, etc.]. This was built as a personal project to apply and strengthen my skills in full-stack development.
