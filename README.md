@@ -1,25 +1,79 @@
-# AirCare 🌬️
+# AiCare 🧠💡  
+**AI-Augmented Medical Records Platform**  
+[Live Demo](https://aircare-app.space) | [GitHub Repo](https://github.com/enepac/aircare)
 
-**Live Demo**: [https://aicare-app.space/)
+## 🩺 What is AiCare?
 
-## 🧠 About This Project
-AirCare is a web application that allows users to [briefly describe what your app does—e.g., monitor air quality, search locations, etc.]. This was built as a personal project to apply and strengthen my skills in full-stack development.
+AiCare is a patient-centric, AI-powered medical platform that helps users upload, organize, and interpret their health records securely. It combines modern web technology with AI tools to extract, analyze, and contextualize medical data using OCR, GPT models, and cloud-native architecture.
 
-## 🛠️ Built With
-- [Frameworks, e.g., React / Next.js / Tailwind CSS / etc.]
-- [APIs used, if any]
-- AI-Assisted coding using [e.g., ChatGPT] as a learning and productivity companion.
+Built as a personal project to challenge traditional developer learning paths, AiCare demonstrates a full-stack implementation of secure, AI-integrated data workflows.
 
-## 💡 What I Learned
-- How to structure and deploy a frontend application.
-- Working with third-party APIs.
-- Collaborating with an AI assistant for debugging and refactoring code.
+---
 
-## 🚀 Future Improvements
-- [List 1–2 features you want to add or improve]
+## 🧱 Tech Stack
 
-## 🤝 Acknowledgments
-Thanks to [e.g., Red Deer Polytechnic, mentors, AI tools] for helping shape this project.
+- **Frontend**: Next.js 14 (App Router) · React · Tailwind CSS · Radix UI · Framer Motion
+- **Backend**: Next.js Server Functions · MongoDB via Mongoose · JWT Auth (NextAuth.js)
+- **AI Services**: OpenAI (GPT) · Amazon Textract · Tesseract OCR
+- **Storage**: AWS S3 for medical files
+- **DevOps**: Docker · GitHub Container Registry · Render.com
+
+---
+
+## 🧠 AI-Powered Features
+
+- **Medical Text Extraction**: Parses structured & scanned documents with hybrid OCR.
+- **GPT Summarization**: Converts raw text into human-readable health insights.
+- **Viewer-Aware Chatbot**: Enables secure, scoped Q&A from patient documents.
+- **Schema Context Injection**: Dynamically feeds MongoDB data into GPT prompts.
+
+---
+
+## 🔒 Security & Access Control
+
+- Role-based permissions (Owner vs Viewer)
+- Scoped API access using JWT & email validation
+- End-to-end data isolation in frontend and backend
+- No sensitive tokens exposed to the client
+
+---
+
+## 🧪 Notable Challenges Overcome
+
+- Built secure, dynamic viewer mode logic across all UI and API layers
+- Created a scalable chatbot with upload support and thread persistence
+- Deployed a custom Docker image with OCR and AI dependencies
+- Designed schema summarization to keep GPT token usage efficient
+
+---
+
+## 🚀 Future Roadmap
+
+- Add audit logging and session activity tracking
+- Improve chatbot UX and real-time updates
+- Add internationalization (i18n) and accessibility features
+- Explore compliance-oriented features like data masking and consent logs
+
+---
+
+## 🙏 Acknowledgments
+
+This project was developed with the help of:
+- AI copilots like ChatGPT (for architecture, debugging, and iteration)
+- Red Deer Polytechnic (academic foundation)
+- Open source communities and API providers
+
+---
+
+## 💬 Want to Collaborate?
+
+Feel free to fork, clone, or open an issue!  
+Reach out on LinkedIn or GitHub if you’d like to learn more, share feedback, or co-build something.
+
+---
+
+“**Built with code, powered by context.**”
+
 
 
 
