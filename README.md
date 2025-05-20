@@ -1,6 +1,6 @@
 # AiCare 🧠💡  
 **AI-Augmented Medical Records Platform**  
-[Live Demo](aircare-app.space) | [GitHub Repo](https://github.com/enepac/AirCare)
+[Live Demo](aircare-app.space) | [GitHub Repo](https://github.com/enepac/AiCare)
 
 ## 🩺 What is AiCare?
 
