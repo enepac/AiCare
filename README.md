@@ -1,3 +1,28 @@
+# AirCare 🌬️
+
+**Live Demo**: [https://aircare-app.space](https://aircare-app.space)
+
+## 🧠 About This Project
+AirCare is a web application that allows users to [briefly describe what your app does—e.g., monitor air quality, search locations, etc.]. This was built as a personal project to apply and strengthen my skills in full-stack development.
+
+## 🛠️ Built With
+- [Frameworks, e.g., React / Next.js / Tailwind CSS / etc.]
+- [APIs used, if any]
+- AI-Assisted coding using [e.g., ChatGPT] as a learning and productivity companion.
+
+## 💡 What I Learned
+- How to structure and deploy a frontend application.
+- Working with third-party APIs.
+- Collaborating with an AI assistant for debugging and refactoring code.
+
+## 🚀 Future Improvements
+- [List 1–2 features you want to add or improve]
+
+## 🤝 Acknowledgments
+Thanks to [e.g., Red Deer Polytechnic, mentors, AI tools] for helping shape this project.
+
+
+
 # AiCare
 
 **AiCare** is a full-stack, AI-enhanced medical assistant web app designed to help patients and health professionals manage, analyze, and share medical data securely. It offers patient record uploads, GPT-driven summarization, chatbot assistance, appointment tracking, and shared viewer access through a modular and secure architecture.
